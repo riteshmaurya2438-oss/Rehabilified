@@ -101,3 +101,96 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: "Test Razorpay payment backend endpoints for FastAPI app with LIVE keys. Test order creation and signature verification rejection only (no real payments)."
+
+backend:
+  - task: "GET /api/ endpoint"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Tested GET /api/ endpoint. Returns correct response {'message': 'Hello World'}. Status 200. Backend is up and responding correctly."
+
+  - task: "POST /api/create-order with valid data"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Tested POST /api/create-order with valid payload (amount=499 INR, lecture type). Successfully created Razorpay order with LIVE keys. Response contains valid orderId (starts with 'order_'), correct amount in paise (49900), currency INR, and valid keyId (starts with 'rzp_live_'). MongoDB document created with status 'created', verified=false. All validations passed."
+
+  - task: "POST /api/create-order validation (amount > 0)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Tested POST /api/create-order with amount=0. Server correctly rejected with HTTP 400 and detail message 'Amount must be greater than zero.' Validation working as expected."
+
+  - task: "POST /api/verify-payment signature verification"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Tested POST /api/verify-payment with invalid signature. Server correctly rejected with HTTP 400 and detail message 'Payment signature verification failed.' HMAC signature verification is properly enforced and bad signatures are rejected as expected."
+
+  - task: "MongoDB payments collection storage"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Verified MongoDB storage after create-order. Document correctly stored in 'payments' collection with status='created', verified=false, payment_id=null, and all order details (order_id, amount, currency, kind, refId, label, email, name, phone, created_at). Data persistence working correctly."
+
+frontend:
+  - task: "Frontend testing"
+    implemented: false
+    working: "NA"
+    file: "N/A"
+    stuck_count: 0
+    priority: "low"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "testing"
+        comment: "Frontend testing not performed as per instructions. Testing agent only tests backend."
+
+metadata:
+  created_by: "testing_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "All Razorpay backend endpoints tested"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "testing"
+    message: "Completed comprehensive testing of all Razorpay payment backend endpoints. All 4 tests passed successfully: (1) Sanity check GET /api/ working, (2) Create order with valid data working with LIVE Razorpay keys, (3) Amount validation working (rejects amount=0), (4) Signature verification working (rejects invalid signatures). MongoDB storage verified - payment documents correctly created with status 'created'. No critical issues found. Backend is production-ready for Razorpay integration."

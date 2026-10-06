@@ -5,8 +5,8 @@ import { useUI } from './ui';
  * - If an API base is set, payments go through a secure backend.
  * - If it is NOT set, a clearly labelled DEMO checkout is shown so the whole flow can be tested.
  */
-export const API_BASE = process.env.REACT_APP_API_BASE ?? '';
-export const LIVE = Boolean(API_BASE);
+export const API_BASE = `${process.env.REACT_APP_BACKEND_URL}/api`;
+export const LIVE = Boolean(process.env.REACT_APP_BACKEND_URL);
 
 const rid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
 

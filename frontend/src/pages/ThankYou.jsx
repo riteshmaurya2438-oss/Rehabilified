@@ -2,7 +2,6 @@ import { Link, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowRight, Check, Video } from 'lucide-react';
 import { useDB } from '../lib/store';
-import { LIVE } from '../lib/payments';
 import { fmtDate, fmtTime, inr } from '../lib/format';
 import { useSEO } from '../lib/seo';
 import { EASE, FloatingShapes } from '../components/ui';
@@ -81,8 +80,7 @@ export function ThankYou() {
                 </a>
               )}
               <p className="mt-5 rounded-xl bg-sky p-3 text-xs text-navy/70">
-                {LIVE ? 'A confirmation email has been sent to ' : 'Demo mode \u2014 in live mode a confirmation email is sent to '}
-                <strong>{email}</strong>.
+                Your booking is confirmed for <strong>{email}</strong>. You can view these details anytime in your dashboard.
               </p>
             </motion.div>
             <div className="mt-8 flex flex-wrap justify-center gap-3">

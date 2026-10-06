@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, HTTPException
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -6,9 +6,10 @@ import os
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
-from typing import List
+from typing import List, Optional
 import uuid
 from datetime import datetime, timezone
+import razorpay
 
 
 ROOT_DIR = Path(__file__).parent
@@ -65,6 +66,105 @@ async def get_status_checks():
             check['timestamp'] = datetime.fromisoformat(check['timestamp'])
     
     return status_checks
+
+# ---------------- Razorpay payments ----------------
+RAZORPAY_KEY_ID = os.environ.get('RAZORPAY_KEY_ID', '')
+RAZORPAY_KEY_SECRET = os.environ.get('RAZORPAY_KEY_SECRET', '')
+razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET)) if RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET else None
+
+
+class CreateOrderRequest(BaseModel):
+    amount: float            # amount in INR (rupees)
+    currency: str = 'INR'
+    kind: Optional[str] = None       # lecture | course | consultation
+    refId: Optional[str] = None
+    label: Optional[str] = None
+    email: Optional[str] = None
+    name: Optional[str] = None
+    phone: Optional[str] = None
+
+
+class VerifyPaymentRequest(BaseModel):
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+    kind: Optional[str] = None
+    refId: Optional[str] = None
+    email: Optional[str] = None
+
+
+@api_router.post("/create-order")
+async def create_order(req: CreateOrderRequest):
+    if razorpay_client is None:
+        raise HTTPException(status_code=503, detail="Payment gateway is not configured.")
+    if req.amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be greater than zero.")
+    amount_paise = int(round(req.amount * 100))
+    receipt = f"rb_{uuid.uuid4().hex[:18]}"  # must be <= 40 chars
+    try:
+        order = razorpay_client.order.create({
+            "amount": amount_paise,
+            "currency": req.currency or "INR",
+            "payment_capture": 1,
+            "receipt": receipt,
+            "notes": {
+                "kind": req.kind or "",
+                "refId": req.refId or "",
+                "email": req.email or "",
+                "label": req.label or "",
+            },
+        })
+    except Exception as e:
+        logger.exception("Razorpay order creation failed")
+        raise HTTPException(status_code=502, detail=f"Could not create order: {e}")
+
+    await db.payments.insert_one({
+        "order_id": order["id"],
+        "amount": amount_paise,
+        "currency": order.get("currency", "INR"),
+        "kind": req.kind,
+        "refId": req.refId,
+        "label": req.label,
+        "email": req.email,
+        "name": req.name,
+        "phone": req.phone,
+        "status": "created",
+        "verified": False,
+        "payment_id": None,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"orderId": order["id"], "amount": order["amount"], "currency": order.get("currency", "INR"), "keyId": RAZORPAY_KEY_ID}
+
+
+@api_router.post("/verify-payment")
+async def verify_payment(req: VerifyPaymentRequest):
+    if razorpay_client is None:
+        raise HTTPException(status_code=503, detail="Payment gateway is not configured.")
+    try:
+        razorpay_client.utility.verify_payment_signature({
+            "razorpay_order_id": req.razorpay_order_id,
+            "razorpay_payment_id": req.razorpay_payment_id,
+            "razorpay_signature": req.razorpay_signature,
+        })
+    except razorpay.errors.SignatureVerificationError:
+        await db.payments.update_one(
+            {"order_id": req.razorpay_order_id},
+            {"$set": {"status": "failed", "verified": False, "payment_id": req.razorpay_payment_id}},
+        )
+        raise HTTPException(status_code=400, detail="Payment signature verification failed.")
+
+    await db.payments.update_one(
+        {"order_id": req.razorpay_order_id},
+        {"$set": {
+            "status": "paid",
+            "verified": True,
+            "payment_id": req.razorpay_payment_id,
+            "signature": req.razorpay_signature,
+            "paid_at": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+    return {"verified": True}
+
 
 # Include the router in the main app
 app.include_router(api_router)
