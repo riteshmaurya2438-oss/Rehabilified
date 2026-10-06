@@ -1,57 +1,132 @@
-import { useEffect } from "react";
-import "@/App.css";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import axios from "axios";
-import { HOME } from "@/constants/testIds";
+import { Component, useEffect } from 'react';
+import { HashRouter, Link, Route, Routes, useLocation } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Toaster } from 'react-hot-toast';
+import { Navbar } from './components/Navbar';
+import { Footer, WhatsAppFloat } from './components/Footer';
+import { Hero } from './components/Hero';
+import { About, CredibilityStrip, Contact, FAQ, Testimonials } from './components/Info';
+import { AppointmentSection, ConsultationSection, CoursesSection, LecturesSection } from './components/Offerings';
+import { HowItWorks, Splash, TopicsMarquee } from './components/Extras';
+import { AuthModal, CheckoutModal, PayModal } from './components/Modals';
+import { Admin } from './pages/admin/AdminApp';
+import { Dashboard, Learn } from './pages/Dashboard';
+import { ThankYou } from './pages/ThankYou';
+import { useSEO } from './lib/seo';
+import { EASE } from './components/ui';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
-
-const Home = () => {
-  const helloWorldApi = async () => {
-    try {
-      const response = await axios.get(`${API}/`);
-      console.log(response.data.message);
-    } catch (e) {
-      console.error(e, `errored out requesting / api`);
-    }
-  };
-
-  useEffect(() => {
-    helloWorldApi();
-  }, []);
-
-  return (
-    // The marker attribute below lets the platform probe detect the stock splash — remove it with this page
-    <div data-emergent-splash>
-      <header className="App-header">
-        <a
-          data-testid={HOME.emergentLink}
-          className="App-link"
-          href="https://emergent.sh"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" />
-        </a>
-        <p className="mt-5">Building something incredible ~!</p>
-      </header>
-    </div>
+function Home() {
+  useSEO(
+    'Rehabilified\u2122 | Clinically-Led Physiotherapy Education by Dr. Sayyeda Uneza Fatima',
+    'Live lectures, courses and 1:1 career guidance for physiotherapy students and professionals, taught from the clinical point of view by Dr. Sayyeda Uneza Fatima, double Gold Medalist and ICU rehab expert.',
   );
-};
-
-function App() {
   return (
-    <div className="App">
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Home />}>
-            <Route index element={<Home />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </div>
+    <main>
+      <Hero />
+      <CredibilityStrip />
+      <TopicsMarquee />
+      <About />
+      <LecturesSection />
+      <CoursesSection />
+      <HowItWorks />
+      <ConsultationSection />
+      <AppointmentSection />
+      <Testimonials />
+      <FAQ />
+      <Contact />
+    </main>
   );
 }
 
-export default App;
+function NotFound() {
+  useSEO('Page not found | Rehabilified\u2122', 'This page could not be found.');
+  return (
+    <main className="flex min-h-screen flex-col items-center justify-center px-5 text-center">
+      <p className="font-display text-7xl font-extrabold text-royal">404</p>
+      <h1 className="mt-4 text-2xl font-extrabold">We couldn&rsquo;t find that page</h1>
+      <Link to="/" className="btn btn-primary mt-6">Back to home</Link>
+    </main>
+  );
+}
+
+class ErrorBoundary extends Component {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    if (this.state.failed) {
+      return (
+        <main className="flex min-h-screen flex-col items-center justify-center px-5 text-center">
+          <h1 className="text-2xl font-extrabold">Something went wrong</h1>
+          <p className="mt-2 text-navy/60">Please refresh the page. If the problem continues, message us on WhatsApp.</p>
+          <button className="btn btn-primary mt-6" onClick={() => window.location.reload()}>Refresh</button>
+        </main>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function Shell() {
+  const location = useLocation();
+  const isAdmin = location.pathname.startsWith('/admin');
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }, [location.pathname]);
+
+  // Cursor-follow glow on every .card
+  useEffect(() => {
+    const onMove = (e) => {
+      const el = e.target?.closest?.('.card');
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      el.style.setProperty('--mx', `${e.clientX - r.left}px`);
+      el.style.setProperty('--my', `${e.clientY - r.top}px`);
+    };
+    document.addEventListener('mousemove', onMove, { passive: true });
+    return () => document.removeEventListener('mousemove', onMove);
+  }, []);
+
+  return (
+    <>
+      <Splash />
+      {!isAdmin && <Navbar />}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={location.pathname}
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          transition={{ duration: 0.35, ease: EASE }}
+        >
+          <Routes location={location}>
+            <Route path="/" element={<Home />} />
+            <Route path="/thank-you/:type/:id" element={<ThankYou />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/learn/:courseId" element={<Learn />} />
+            <Route path="/admin" element={<Admin />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </motion.div>
+      </AnimatePresence>
+      {!isAdmin && <Footer />}
+      {!isAdmin && <WhatsAppFloat />}
+      <AuthModal />
+      <CheckoutModal />
+      <PayModal />
+    </>
+  );
+}
+
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <HashRouter>
+        <Shell />
+      </HashRouter>
+      <Toaster position="top-center" toastOptions={{ style: { borderRadius: '14px', color: '#0A1F44', fontWeight: 600 } }} />
+    </ErrorBoundary>
+  );
+}
