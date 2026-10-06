@@ -9,10 +9,10 @@ import { cn } from '../utils/cn';
 /* ---------------- 2. Credibility strip ---------------- */
 export function CredibilityStrip() {
   const items = [
-    { icon: Medal, t: 'Gold Medalist', s: 'BPT & MPT' },
-    { icon: GraduationCap, t: 'Visiting Faculty', s: 'Jamia Millia Islamia' },
-    { icon: Stethoscope, t: 'ICU Rehab Expert', s: 'Critical-care rehabilitation' },
-    { icon: Globe, t: 'International Educator', s: 'Teaching physios worldwide' },
+    { icon: Medal, t: 'Double Gold Medalist', s: 'BPT & MPT Cardiopulmonary (JMI)' },
+    { icon: GraduationCap, t: 'Visiting Faculty', s: 'Jamia Millia Islamia University' },
+    { icon: Stethoscope, t: 'ICU & Cardio Rehab', s: '6 years of clinical experience' },
+    { icon: Globe, t: 'IAP National Awardee', s: '@cardiopulmonaryrehab' },
   ];
   return (
     <section aria-label="Credentials" className="relative z-10 -mt-6 px-5 sm:px-8">
@@ -43,9 +43,11 @@ export function About() {
   const y = useTransform(scrollY, [400, 1600], [30, -30]);
   const roles = [
     'Founder, Rehabilified\u2122',
+    'BPT & MPT (Cardiopulmonary), Jamia Millia Islamia \u2014 Double Gold Medalist',
     'Visiting Faculty, Jamia Millia Islamia University',
     'Consultant Physiotherapist, Xcell Physiocare',
-    'ICU Rehab Expert & International Educator',
+    'IAP National Award winner for educational content \u00b7 @cardiopulmonaryrehab',
+    'Keynote speaker & hands-on workshop lead in ICU and cardiopulmonary rehab',
   ];
   return (
     <section id="about" className="relative overflow-hidden py-24 sm:py-32">
@@ -56,7 +58,7 @@ export function About() {
             <FounderPhoto className="relative aspect-[4/5] w-full rounded-[2rem] shadow-2xl shadow-royal/20" />
             <div className="glass absolute -bottom-6 left-6 right-6 rounded-2xl px-5 py-4 shadow-xl shadow-royal/10">
               <p className="font-display text-base font-extrabold text-navy">Dr. Sayyeda Uneza Fatima</p>
-              <p className="text-xs text-navy/60">BPT (Gold Medalist) &middot; MPT (Gold Medalist)</p>
+              <p className="text-xs text-navy/60">BPT & MPT Cardiopulmonary (JMI) &middot; Double Gold Medalist</p>
             </div>
           </motion.div>
         </Reveal>
@@ -65,10 +67,10 @@ export function About() {
           <SectionHeading center={false} eyebrow="About the founder" title="Meet Dr. Sayyeda Uneza Fatima" />
           <Reveal delay={0.1}>
             <p className="mt-6 text-lg leading-relaxed text-navy/70">
-              Dr. Sayyeda Uneza Fatima is a physiotherapist and educator who completed both her BPT and MPT as a Gold Medalist. She leads Rehabilified&trade;, teaches as Visiting Faculty at Jamia Millia Islamia University, and works as a Consultant Physiotherapist at Xcell Physiocare with a special focus on ICU rehabilitation.
+              Dr. Sayyeda Uneza Fatima completed both her BPT and her MPT in Cardiopulmonary from Jamia Millia Islamia as a double Gold Medalist. With 6 years of experience in ICU and cardiopulmonary rehabilitation, she founded Rehabilified&trade;, teaches as Visiting Faculty at Jamia Millia Islamia University, and practises as a Consultant Physiotherapist at Xcell Physiocare.
             </p>
             <p className="mt-4 text-base leading-relaxed text-navy/65">
-              Rehabilified was built on a simple belief: physiotherapy students and early-career clinicians learn best when theory is taught from the clinical point of view &mdash; the way decisions are actually made at the bedside and in the clinic. Every lecture, course and consultation is designed to turn textbook knowledge into confident practice.
+              An IAP National Award winner for her educational content on Instagram (@cardiopulmonaryrehab), she is a keynote speaker at national and international conferences and has led multiple hands-on workshops in cardiopulmonary and ICU rehabilitation. Rehabilified was built on a simple belief: physiotherapy students and early-career clinicians learn best when theory is taught from the clinical point of view &mdash; the way decisions are actually made at the bedside and in the ICU.
             </p>
             <ul className="mt-6 space-y-3">
               {roles.map((r) => (

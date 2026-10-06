@@ -140,12 +140,12 @@ function seed() {
       { id: 'f6', q: 'Is the patient appointment form for emergencies?', a: 'No. It is for non-urgent physiotherapy concerns only. In an emergency, call your local emergency number (112 in India) or go to the nearest hospital.', published: true },
     ],
     stats: [
-      { id: 's1', label: 'Students mentored', value: 1500, suffix: '+' },
-      { id: 's2', label: 'Live lectures delivered', value: 60, suffix: '+' },
-      { id: 's3', label: 'Clinical topics covered', value: 40, suffix: '+' },
+      { id: 's1', label: 'Physios taught & mentored', value: 1500, suffix: '+' },
+      { id: 's2', label: 'Years in ICU & cardio rehab', value: 6, suffix: '+' },
+      { id: 's3', label: 'Workshops & talks delivered', value: 40, suffix: '+' },
       { id: 's4', label: 'Average learner rating', value: 4.9, suffix: '/5' },
     ],
-    settings: { consultationPrice: 999, whatsapp: '917303995608', instagram: 'rehabilified', email: '' },
+    settings: { consultationPrice: 999, whatsapp: '917303995608', instagram: 'cardiopulmonaryrehab', email: '' },
     progress: {},
   };
 }
@@ -278,7 +278,7 @@ export const useDB = create()(
 
       resetAll: () => set({ ...seed() }),
     }),
-    { name: 'rehabilified-db-v2' },
+    { name: 'rehabilified-db-v3' },
   ),
 );
 

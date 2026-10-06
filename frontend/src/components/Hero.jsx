@@ -7,9 +7,9 @@ import { cn } from '../utils/cn';
 /* On phones the badges sit INSIDE the photo frame; from `sm` up they float outside. */
 const badges = [
   { icon: Medal, title: 'BPT \u00b7 Gold Medalist', pos: 'left-1 top-[36%] sm:-left-12 sm:top-10', delay: '0s' },
-  { icon: Medal, title: 'MPT \u00b7 Gold Medalist', pos: 'right-1 top-[52%] sm:-right-10 sm:top-1/3', delay: '1.5s' },
+  { icon: Medal, title: 'MPT Cardiopulmonary', sub: 'Gold Medalist \u00b7 JMI', pos: 'right-1 top-[52%] sm:-right-10 sm:top-1/3', delay: '1.5s' },
   { icon: GraduationCap, title: 'Visiting Faculty', sub: 'Jamia Millia Islamia', pos: 'bottom-24 left-1 sm:-left-16 sm:bottom-28', delay: '3s' },
-  { icon: Stethoscope, title: 'ICU Rehab Expert', pos: 'bottom-4 right-1 sm:-right-8 sm:bottom-8', delay: '4.5s' },
+  { icon: Stethoscope, title: 'ICU & Cardio Rehab', sub: '6 years of experience', pos: 'bottom-4 right-1 sm:-right-8 sm:bottom-8', delay: '4.5s' },
 ];
 
 export function Hero() {
@@ -48,7 +48,7 @@ export function Hero() {
             transition={{ duration: 0.8, delay: 2.6, ease: EASE }}
             className="mt-5 max-w-xl text-base leading-relaxed text-navy/65 sm:mt-6 sm:text-lg"
           >
-            Live lectures, structured courses and 1:1 career guidance from Dr. Sayyeda Uneza Fatima, a double Gold Medalist and ICU rehab expert who turns textbook theory into confident clinical practice.
+            Live lectures, structured courses and 1:1 career guidance from Dr. Sayyeda Uneza Fatima &mdash; a double Gold Medalist, MPT in Cardiopulmonary and ICU rehab specialist who turns textbook theory into confident clinical practice.
           </motion.p>
 
           <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, delay: 2.75, ease: EASE }} className="mt-8 flex flex-col gap-3 sm:mt-9 sm:flex-row sm:flex-wrap sm:gap-4">
