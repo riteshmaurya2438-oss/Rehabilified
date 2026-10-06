@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ArrowRight, BookOpen, Check, Clock, Play, ShieldAlert, Users, Video } from 'lucide-react';
-import { Reveal, SectionHeading } from './ui';
+import { AlertTriangle, ArrowRight, Award, BookOpen, Check, CheckCircle2, Clock, Copy, ExternalLink, GraduationCap, Play, ShieldAlert, ShieldCheck, Users, Video } from 'lucide-react';
+import { Modal, Reveal, SectionHeading } from './ui';
 import { useDB, useSession } from '../lib/store';
 import { useUI } from '../lib/ui';
+import { requestPayment } from '../lib/payments';
 import { dayNum, fmtDate, fmtTime, inr, monthShort, todayISO, weekdayShort } from '../lib/format';
 import { cn } from '../utils/cn';
 
@@ -179,46 +180,184 @@ function SlotPicker({ kind, selected, onSelect }) {
   );
 }
 
-/* ---------------- 6. Career Clarity 1:1 consultation ---------------- */
+/* ---------------- 6. Career Clarity Consultation (paid, gated) ---------------- */
+const REG_FORM_URL = 'https://forms.gle/SdUuf9npWgMxzNpj8';
+
+const CONSULT_OPTIONS = [
+  { id: 'cc-30', short: '30-Minute Consultation', label: '30-Minute Career Clarity Consultation', duration: '30 minutes', price: 799, blurb: 'A focused session to get clear, honest answers on your most pressing career question.' },
+  { id: 'cc-60', short: '60-Minute Consultation', label: '60-Minute Career Clarity Consultation', duration: '60 minutes', price: 999, blurb: 'A deeper session to map your options, specialisation and a step-by-step plan.', popular: true },
+];
+
+const CONSULT_TOPICS = [
+  'Career options after BPT',
+  'MPT & specialisation choices',
+  'Internship / hospital selection',
+  'Clinical skill gaps',
+  'Clinical confidence',
+  'Career planning',
+  'Teaching / academic opportunities',
+  'Long-term professional direction',
+];
+
+const ccEmailOk = (e) => /^\S+@\S+\.\S+$/.test(e.trim());
+const ccPhoneOk = (p) => p.replace(/\D/g, '').length >= 10;
+
 export function ConsultationSection() {
-  const price = useDB((s) => s.settings.consultationPrice);
-  const openCheckout = useUI((s) => s.openCheckout);
-  const [slotId, setSlotId] = useState('');
-  const points = [
-    'Clarity on specialisations: ICU, neuro, musculoskeletal, cardio-respiratory and more',
-    'A realistic roadmap for internship, MPT, clinical practice or teaching',
-    'Guidance on building clinical confidence and a strong profile',
-    'Honest answers to your questions from someone who has walked the path',
-  ];
+  const addPayment = useDB((s) => s.addPayment);
+  const [chosen, setChosen] = useState(null);
+  const [step, setStep] = useState('form'); // form | success | failed
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  function book(option) {
+    setChosen(option);
+    setStep('form');
+    setBusy(false);
+  }
+  function closeModal() {
+    if (busy) return;
+    setChosen(null);
+  }
+
+  async function pay(e) {
+    e.preventDefault();
+    if (!chosen) return;
+    if (name.trim().length < 2) return void toast.error('Please enter your full name.');
+    if (!ccEmailOk(email)) return void toast.error('Please enter a valid email address.');
+    if (!ccPhoneOk(phone)) return void toast.error('Please enter a valid phone number.');
+    setBusy(true);
+    try {
+      const p = await requestPayment({ kind: 'consultation', refId: chosen.id, label: chosen.label, amount: chosen.price, name: name.trim(), email: email.trim(), phone: phone.trim() });
+      if (!p) { setBusy(false); return; } // user closed the payment window — not successful
+      if (p.status === 'paid' && p.verified) {
+        addPayment({ ...p, name: name.trim(), phone: phone.trim() });
+        setStep('success');
+      } else {
+        setStep('failed');
+      }
+    } catch (err) {
+      setStep('failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function copyLink() {
+    navigator.clipboard?.writeText(REG_FORM_URL).then(() => {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
   return (
     <section id="consultation" className="relative overflow-hidden bg-gradient-to-b from-white to-sky/60 py-24 sm:py-32">
-      <div className="mx-auto grid max-w-7xl gap-12 px-5 sm:px-8 lg:grid-cols-2">
-        <div>
-          <SectionHeading center={false} eyebrow="Career Clarity · 1:1" title="Unsure what comes next in your physio career?" sub="A private video session with Dr. Sayyeda for physiotherapy students and professionals who want direction, not generic advice." />
+      <div className="mx-auto max-w-7xl px-5 sm:px-8">
+        <Reveal className="mx-auto max-w-3xl text-center">
+          <span className="inline-flex items-center gap-2 rounded-full bg-sky px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-royal">
+            <span className="h-1.5 w-1.5 rounded-full bg-royal" /> Career Clarity &middot; 1:1
+          </span>
+          <h2 className="mt-5 font-display text-4xl font-extrabold leading-tight text-navy sm:text-5xl">BPT done. What next?</h2>
+          <p className="mt-4 text-base leading-relaxed text-navy/65 sm:text-lg">
+            Get personalised career clarity from an experienced physiotherapist and educator &mdash; a private 1:1 video consultation with Dr. Sayyeda Uneza Fatima.
+          </p>
+          <p className="mx-auto mt-5 max-w-2xl rounded-2xl bg-white/70 p-4 text-sm leading-relaxed text-navy/65 shadow-sm">
+            <strong className="text-navy">BPT</strong> is a Bachelor of Physiotherapy and <strong className="text-navy">MPT</strong> is a Master of Physiotherapy. MPT is a postgraduate option &mdash; it is <em>not</em> automatically compulsory for every physiotherapist. This session helps you decide what genuinely fits your goals.
+          </p>
+        </Reveal>
+
+        <div className="mx-auto mt-14 grid max-w-4xl gap-6 md:grid-cols-2">
+          {CONSULT_OPTIONS.map((o, i) => (
+            <Reveal key={o.id} delay={i * 0.1} className="h-full">
+              <article className={cn('card flex h-full flex-col', o.popular && 'ring-2 ring-royal')}>
+                {o.popular && <span className="absolute right-5 top-5 rounded-full bg-royal px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-white">Most popular</span>}
+                <span className="inline-flex w-fit items-center gap-2 rounded-full bg-sky px-3 py-1.5 text-xs font-semibold text-royal"><Clock className="h-3.5 w-3.5" /> {o.duration}</span>
+                <h3 className="mt-4 text-xl font-bold text-navy">{o.short}</h3>
+                <p className="mt-2 flex-1 text-sm leading-relaxed text-navy/65">{o.blurb}</p>
+                <p className="mt-5 font-display text-4xl font-extrabold text-royal">{inr(o.price)}<span className="ml-2 text-sm font-medium text-navy/50">one session</span></p>
+                <button className="btn btn-primary mt-5 w-full py-3.5" onClick={() => book(o)}>Book Now <ArrowRight className="h-4 w-4" /></button>
+              </article>
+            </Reveal>
+          ))}
+        </div>
+        <p className="mt-5 flex items-center justify-center gap-2 text-center text-xs text-navy/55"><ShieldCheck className="h-4 w-4 text-royal" /> Secure online payment via Razorpay &middot; registration link shared only after payment</p>
+
+        <div className="mt-16 grid gap-10 lg:grid-cols-2">
+          <Reveal>
+            <div className="rounded-3xl border border-royal/10 bg-white p-6 shadow-sm sm:p-8">
+              <h3 className="text-lg font-bold text-navy">What we can cover</h3>
+              <ul className="mt-5 grid gap-x-6 gap-y-3 sm:grid-cols-2">
+                {CONSULT_TOPICS.map((t) => (
+                  <li key={t} className="flex items-start gap-2.5 text-sm text-navy/75"><span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-royal text-white"><Check className="h-3 w-3" /></span>{t}</li>
+                ))}
+              </ul>
+            </div>
+          </Reveal>
           <Reveal delay={0.1}>
-            <ul className="mt-8 space-y-4">
-              {points.map((p) => (
-                <li key={p} className="flex items-start gap-3 text-navy/75">
-                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-royal text-white"><Check className="h-3 w-3" /></span>
-                  {p}
-                </li>
-              ))}
-            </ul>
-            <p className="mt-8 font-display text-4xl font-extrabold text-royal">{inr(price)}<span className="ml-2 text-base font-medium text-navy/50">per session</span></p>
+            <div className="rounded-3xl border border-royal/10 bg-navy p-6 text-white shadow-sm sm:p-8">
+              <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-widest text-white/80"><Award className="h-3.5 w-3.5" /> Your mentor</span>
+              <h3 className="mt-4 font-display text-2xl font-extrabold">Dr. Sayyeda Uneza Fatima (PT)</h3>
+              <ul className="mt-4 space-y-2 text-sm text-white/80">
+                <li className="flex items-center gap-2"><GraduationCap className="h-4 w-4 text-sky" /> MPT &ndash; Cardiopulmonary &middot; Gold Medalist</li>
+                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-sky" /> Consultant Physiotherapist</li>
+                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-sky" /> Visiting Faculty at JMI</li>
+                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-sky" /> Founder of Rehabilified</li>
+              </ul>
+              <p className="mt-4 text-sm leading-relaxed text-white/70">9+ years of experience across clinical practice, ICU rehabilitation, teaching, entrepreneurship and digital education.</p>
+            </div>
           </Reveal>
         </div>
-
-        <Reveal delay={0.15}>
-          <div className="rounded-3xl border border-royal/10 bg-white p-6 shadow-2xl shadow-royal/10 sm:p-8">
-            <h3 className="text-xl font-bold">Pick your slot</h3>
-            <div className="mt-5"><SlotPicker kind="consultation" selected={slotId} onSelect={setSlotId} /></div>
-            <button className="btn btn-primary mt-6 w-full py-3.5" disabled={!slotId} onClick={() => openCheckout({ kind: 'consultation', refId: slotId })}>
-              {slotId ? `Book this slot \u00b7 ${inr(price)}` : 'Select a slot to continue'}
-            </button>
-            <p className="mt-3 text-center text-xs text-navy/50">Each slot can be booked by one person only.</p>
-          </div>
-        </Reveal>
       </div>
+
+      <Modal open={!!chosen} onClose={closeModal} title={step === 'success' ? 'Payment successful' : step === 'failed' ? 'Payment not confirmed' : 'Career Clarity Consultation'} wide>
+        {chosen && step === 'form' && (
+          <form onSubmit={pay} className="mt-5 space-y-4">
+            <div className="rounded-2xl bg-sky p-4">
+              <p className="font-semibold text-navy">{chosen.label}</p>
+              <p className="mt-1 flex items-center gap-2 text-sm text-navy/65"><Clock className="h-4 w-4 text-royal" /> {chosen.duration} &middot; 1:1 video call</p>
+              <p className="mt-3 font-display text-3xl font-extrabold text-royal">{inr(chosen.price)}</p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div><label className="label" htmlFor="cc-name">Full name</label><input id="cc-name" className="field" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" /></div>
+              <div><label className="label" htmlFor="cc-phone">Phone / WhatsApp</label><input id="cc-phone" type="tel" className="field" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98765 43210" autoComplete="tel" /></div>
+              <div className="sm:col-span-2"><label className="label" htmlFor="cc-email">Email</label><input id="cc-email" type="email" className="field" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email" /></div>
+            </div>
+            <button className="btn btn-primary w-full py-3.5" disabled={busy}>{busy ? 'Opening secure checkout\u2026' : `Pay ${inr(chosen.price)} securely`}</button>
+            <p className="flex items-center justify-center gap-2 text-center text-xs text-navy/50"><ShieldCheck className="h-4 w-4 text-royal" /> Secure payment via Razorpay (INR). The registration link is shown only after your payment is confirmed.</p>
+          </form>
+        )}
+
+        {chosen && step === 'success' && (
+          <div className="mt-5">
+            <div className="flex flex-col items-center text-center">
+              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500 text-white"><CheckCircle2 className="h-9 w-9" /></span>
+              <h4 className="mt-4 font-display text-2xl font-extrabold text-navy">Payment Successful &#10003;</h4>
+              <p className="mt-2 text-sm text-navy/65">Your consultation payment has been received for the <strong>{chosen.short}</strong> ({inr(chosen.price)}).</p>
+            </div>
+            <div className="mt-5 rounded-2xl border border-royal/15 bg-sky p-4 text-sm text-navy/75">
+              <p className="font-semibold text-navy">Next step: complete the registration form</p>
+              <p className="mt-1">Please complete the registration form so Dr. Fatima can receive your details and prepare for your consultation. Your payment is confirmed; the consultation time is arranged after you submit this form.</p>
+            </div>
+            <a href={REG_FORM_URL} target="_blank" rel="noopener noreferrer" className="btn btn-primary mt-5 w-full py-3.5">Complete Registration <ExternalLink className="h-4 w-4" /></a>
+            <div className="mt-3 flex items-center gap-2 rounded-xl border border-navy/10 bg-white p-2 pl-3">
+              <span className="min-w-0 flex-1 truncate text-xs text-navy/60">{REG_FORM_URL}</span>
+              <button type="button" onClick={copyLink} className="btn btn-outline !px-3 !py-2 text-xs">{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} {copied ? 'Copied' : 'Copy'}</button>
+            </div>
+            <p className="mt-3 text-center text-xs text-navy/45">Keep this link safe &mdash; it is your consultation registration form.</p>
+          </div>
+        )}
+
+        {chosen && step === 'failed' && (
+          <div className="mt-5 text-center">
+            <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100 text-red-600"><AlertTriangle className="h-9 w-9" /></span>
+            <h4 className="mt-4 font-display text-xl font-extrabold text-navy">Payment could not be confirmed. Please try again.</h4>
+            <p className="mt-2 text-sm text-navy/65">You have not received the registration link because the payment was not confirmed. If any amount was deducted for a failed attempt, your bank auto-refunds it.</p>
+            <button className="btn btn-primary mt-5 w-full py-3.5" onClick={() => setStep('form')}>Try Payment Again</button>
+          </div>
+        )}
+      </Modal>
     </section>
   );
 }
