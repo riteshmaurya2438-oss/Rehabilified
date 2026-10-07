@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -8,8 +8,9 @@ from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import razorpay
+import requests
 
 
 ROOT_DIR = Path(__file__).parent
@@ -164,6 +165,92 @@ async def verify_payment(req: VerifyPaymentRequest):
         }},
     )
     return {"verified": True}
+
+
+# ---------------- Emergent Google Authentication ----------------
+EMERGENT_SESSION_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
+SESSION_DAYS = 7
+
+
+class SessionRequest(BaseModel):
+    session_id: str
+
+
+async def _current_user(request: Request):
+    token = request.cookies.get("session_token")
+    if not token:
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            token = auth[7:]
+    if not token:
+        return None
+    sess = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
+    if not sess:
+        return None
+    expires_at = sess.get("expires_at")
+    if isinstance(expires_at, str):
+        expires_at = datetime.fromisoformat(expires_at)
+    if expires_at and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if not expires_at or expires_at < datetime.now(timezone.utc):
+        return None
+    user = await db.users.find_one({"user_id": sess["user_id"]}, {"_id": 0})
+    return user
+
+
+@api_router.post("/auth/session")
+async def auth_session(body: SessionRequest, response: Response):
+    try:
+        r = requests.get(EMERGENT_SESSION_URL, headers={"X-Session-ID": body.session_id}, timeout=15)
+    except Exception:
+        raise HTTPException(status_code=502, detail="Could not reach the authentication service.")
+    if r.status_code != 200:
+        raise HTTPException(status_code=401, detail="Invalid or expired session.")
+    data = r.json()
+    email = (data.get("email") or "").lower()
+    if not email:
+        raise HTTPException(status_code=400, detail="No email returned by the provider.")
+
+    existing = await db.users.find_one({"email": email}, {"_id": 0})
+    if existing:
+        user_id = existing["user_id"]
+        await db.users.update_one({"user_id": user_id}, {"$set": {"name": data.get("name", existing.get("name")), "picture": data.get("picture", existing.get("picture"))}})
+    else:
+        user_id = f"user_{uuid.uuid4().hex[:12]}"
+        await db.users.insert_one({
+            "user_id": user_id,
+            "email": email,
+            "name": data.get("name", ""),
+            "picture": data.get("picture", ""),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+
+    session_token = data.get("session_token") or uuid.uuid4().hex
+    expires_at = datetime.now(timezone.utc) + timedelta(days=SESSION_DAYS)
+    await db.user_sessions.update_one(
+        {"session_token": session_token},
+        {"$set": {"user_id": user_id, "session_token": session_token, "expires_at": expires_at.isoformat(), "created_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True,
+    )
+    response.set_cookie(key="session_token", value=session_token, httponly=True, secure=True, samesite="none", path="/", max_age=SESSION_DAYS * 24 * 3600)
+    return {"user_id": user_id, "email": email, "name": data.get("name", ""), "picture": data.get("picture", "")}
+
+
+@api_router.get("/auth/me")
+async def auth_me(request: Request):
+    user = await _current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated.")
+    return user
+
+
+@api_router.post("/auth/logout")
+async def auth_logout(request: Request, response: Response):
+    token = request.cookies.get("session_token")
+    if token:
+        await db.user_sessions.delete_one({"session_token": token})
+    response.delete_cookie("session_token", path="/", samesite="none", secure=True)
+    return {"ok": True}
 
 
 # Include the router in the main app

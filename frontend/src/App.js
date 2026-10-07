@@ -1,7 +1,8 @@
 import { Component, useEffect } from 'react';
-import { HashRouter, Link, Route, Routes, useLocation } from 'react-router-dom';
+import { HashRouter, Link, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Toaster } from 'react-hot-toast';
+import toast, { Toaster } from 'react-hot-toast';
+import { useSession } from './lib/store';
 import { Navbar } from './components/Navbar';
 import { Footer, WhatsAppFloat } from './components/Footer';
 import { Hero } from './components/Hero';
@@ -70,7 +71,40 @@ class ErrorBoundary extends Component {
 
 function Shell() {
   const location = useLocation();
+  const navigate = useNavigate();
   const isAdmin = location.pathname.startsWith('/admin');
+  const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+  // Handle return from Emergent Google sign-in (URL carries #session_id=...)
+  useEffect(() => {
+    const m = window.location.hash.match(/session_id=([^&]+)/);
+    if (!m) return;
+    const sid = m[1];
+    (async () => {
+      try {
+        const res = await fetch(`${API}/auth/session`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id: sid }) });
+        if (!res.ok) throw new Error('auth failed');
+        const u = await res.json();
+        useSession.setState({ user: { id: u.user_id, name: u.name || u.email, email: u.email, picture: u.picture } });
+        toast.success(`Welcome, ${(u.name || u.email).split(' ')[0]}!`);
+        navigate('/dashboard', { replace: true });
+      } catch {
+        toast.error('Google sign-in failed. Please try again.');
+        navigate('/', { replace: true });
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Restore an existing Google session on load
+  useEffect(() => {
+    if (window.location.hash.includes('session_id=')) return;
+    fetch(`${API}/auth/me`, { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((u) => { if (u && u.user_id) useSession.setState({ user: { id: u.user_id, name: u.name || u.email, email: u.email, picture: u.picture } }); })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });

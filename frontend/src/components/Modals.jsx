@@ -33,10 +33,9 @@ export function AuthModal() {
   }
 
   function google() {
-    signIn('Google Student', 'student@gmail.com');
-    toast.success(LIVE ? 'Signed in with Google.' : 'Signed in with a demo Google account.');
-    close();
-    navigate('/dashboard');
+    // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+    const redirectUrl = window.location.origin + '/';
+    window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
   }
 
   return (
@@ -49,7 +48,7 @@ export function AuthModal() {
           <path fill="#FBBC05" d="M5.4 14.4a7.2 7.2 0 010-4.8V6.5H1.4a12 12 0 000 11z" />
           <path fill="#EA4335" d="M12 4.8c1.7 0 3.3.6 4.5 1.8l3.4-3.4A12 12 0 001.4 6.5l4 3.1C6.3 6.9 8.9 4.8 12 4.8z" />
         </svg>
-        Continue with Google{LIVE ? '' : ' (demo)'}
+        Continue with Google
       </button>
       <div className="my-5 flex items-center gap-3 text-xs text-navy/40">
         <span className="h-px flex-1 bg-navy/10" />

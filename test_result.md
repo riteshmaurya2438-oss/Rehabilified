@@ -165,6 +165,78 @@ backend:
         agent: "testing"
         comment: "Verified MongoDB storage after create-order. Document correctly stored in 'payments' collection with status='created', verified=false, payment_id=null, and all order details (order_id, amount, currency, kind, refId, label, email, name, phone, created_at). Data persistence working correctly."
 
+  - task: "GET /api/auth/me without authentication"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Tested GET /api/auth/me without any token (no cookie, no Bearer header). Server correctly rejected with HTTP 401 and detail 'Not authenticated.' Authentication guard working correctly."
+
+  - task: "GET /api/auth/me with Bearer token"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Tested GET /api/auth/me with Authorization: Bearer header. Seeded test user (test-user-auth1) and session (testtok_AUTH_123) in MongoDB. Server returned HTTP 200 with correct user data: user_id='test-user-auth1', email='authtest@example.com', name='Auth Test'. Verified no '_id' field in response (MongoDB _id correctly excluded). Bearer token authentication working correctly."
+
+  - task: "GET /api/auth/me with cookie"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Tested GET /api/auth/me with cookie 'session_token'. Server returned HTTP 200 with correct user data matching test user. Cookie-based authentication working correctly."
+
+  - task: "POST /api/auth/logout"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Tested POST /api/auth/logout with cookie. Server returned HTTP 200 with response {'ok': true}. Session correctly deleted from MongoDB (verified by subsequent auth/me request returning 401). Logout functionality working correctly."
+
+  - task: "Session deletion after logout"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Tested GET /api/auth/me with same Bearer token after logout. Server correctly returned HTTP 401 'Not authenticated.' Session was properly deleted from user_sessions collection. Session cleanup working correctly."
+
+  - task: "POST /api/auth/session with invalid session_id"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Tested POST /api/auth/session with invalid session_id 'obviously-invalid-session-xyz'. Server correctly rejected with HTTP 401 and detail 'Invalid or expired session.' External authentication provider correctly rejected invalid session. Session validation working correctly."
+
 frontend:
   - task: "Frontend testing"
     implemented: false
@@ -181,12 +253,13 @@ frontend:
 metadata:
   created_by: "testing_agent"
   version: "1.0"
-  test_sequence: 1
+  test_sequence: 2
   run_ui: false
 
 test_plan:
   current_focus:
-    - "All Razorpay backend endpoints tested"
+    - "All Google Auth endpoints tested and working"
+    - "All Razorpay backend endpoints regression tested and working"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -196,3 +269,5 @@ agent_communication:
     message: "Completed comprehensive testing of all Razorpay payment backend endpoints. All 4 tests passed successfully: (1) Sanity check GET /api/ working, (2) Create order with valid data working with LIVE Razorpay keys, (3) Amount validation working (rejects amount=0), (4) Signature verification working (rejects invalid signatures). MongoDB storage verified - payment documents correctly created with status 'created'. No critical issues found. Backend is production-ready for Razorpay integration."
   - agent: "testing"
     message: "Completed comprehensive frontend UI/UX testing of Rehabilified physiotherapy website. ALL 8 TESTS PASSED: (1) Mobile nav hamburger menu - all links present, no Admin link, proper scrolling behavior, (2) Hero desktop - single 'Book Patient Appointment' button, old buttons removed, (3) Admin NOT in top nav - confirmed, (4) Footer - Instagram link '@rehabilified' fits on one line, Admin link present, (5) Testimonials carousel - single sliding card with arrows and dots working, (6) Patient appointment WhatsApp - form submits to wa.me/917303995608 with patient details, (7) Courses - 'Buy · ₹...' buttons, 'Instant access link after payment' text, NO modules/lessons text, (8) Admin security - session locks on exit, password required again. No critical issues found. All requested features working correctly."
+  - agent: "testing"
+    message: "Completed comprehensive testing of Google Auth endpoints and Razorpay regression testing. ALL 9 TESTS PASSED: SECTION A (Google Auth): (A1) GET /api/auth/me without token correctly returns 401, (A2) GET /api/auth/me with Bearer token returns 200 with correct user data and no _id field, (A3) GET /api/auth/me with cookie returns 200, (A4) POST /api/auth/logout returns 200 with ok:true, (A5) GET /api/auth/me after logout correctly returns 401 (session deleted), (A6) POST /api/auth/session with invalid session_id correctly returns 401. SECTION B (Razorpay Regression): (B7) GET /api/ returns Hello World, (B8) POST /api/create-order creates valid order with LIVE keys (no charge), (B9) POST /api/verify-payment with bad signature correctly returns 400. All authentication flows working correctly. All payment endpoints working correctly. No critical issues found."

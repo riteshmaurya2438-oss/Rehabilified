@@ -64,7 +64,7 @@ export function Dashboard() {
               <h1 className="mt-1 text-3xl font-extrabold sm:text-4xl">Hello, {user.name.split(' ')[0]} 👋</h1>
               <p className="text-sm text-navy/55">{user.email}</p>
             </div>
-            <button className="btn btn-outline" onClick={() => { signOut(); toast.success('Signed out'); }}>Sign out</button>
+            <button className="btn btn-outline" onClick={async () => { try { await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/auth/logout`, { method: 'POST', credentials: 'include' }); } catch (e) { /* ignore */ } signOut(); toast.success('Signed out'); }}>Sign out</button>
           </div>
         </Reveal>
 
