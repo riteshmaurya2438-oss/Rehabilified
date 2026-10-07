@@ -253,6 +253,27 @@ async def auth_logout(request: Request, response: Response):
     return {"ok": True}
 
 
+# ---------------- Shared site content (so Admin edits appear on every device) ----------------
+@api_router.get("/content")
+async def get_content():
+    doc = await db.site_content.find_one({"_id": "singleton"})
+    if not doc:
+        return {}
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.put("/content")
+async def put_content(request: Request):
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="Invalid content payload.")
+    body["_id"] = "singleton"
+    body["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.site_content.replace_one({"_id": "singleton"}, body, upsert=True)
+    return {"ok": True}
+
+
 # Include the router in the main app
 app.include_router(api_router)
 

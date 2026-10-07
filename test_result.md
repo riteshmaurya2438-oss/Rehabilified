@@ -237,6 +237,66 @@ backend:
         agent: "testing"
         comment: "Tested POST /api/auth/session with invalid session_id 'obviously-invalid-session-xyz'. Server correctly rejected with HTTP 401 and detail 'Invalid or expired session.' External authentication provider correctly rejected invalid session. Session validation working correctly."
 
+  - task: "PUT /api/content with initial data"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Tested PUT /api/content with initial data containing testimonials with CROSS_DEVICE_MARKER_9988 and stats with 'Sync Stat Label'. Server returned HTTP 200 with {'ok': true}. Data successfully stored in MongoDB site_content collection with _id='singleton'. PUT endpoint working correctly."
+
+  - task: "GET /api/content and verify data"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Tested GET /api/content. Server returned HTTP 200 with correct data: testimonials[0].text='CROSS_DEVICE_MARKER_9988', stats[0].label='Sync Stat Label'. Verified no '_id' field in response (MongoDB _id correctly excluded). GET endpoint working correctly."
+
+  - task: "PUT /api/content overwrite/upsert functionality"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Tested PUT /api/content with different marker (CROSS_DEVICE_MARKER_0001), then GET to verify overwrite. Server correctly overwrote the singleton document. GET returned updated marker 'CROSS_DEVICE_MARKER_0001'. Upsert functionality working correctly - no duplicate documents created."
+
+  - task: "MongoDB site_content singleton document"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Verified MongoDB site_content collection contains exactly ONE document with _id='singleton'. Document contains latest marker 'CROSS_DEVICE_MARKER_0001'. Singleton pattern correctly implemented - Admin edits are stored on server and shared across all devices."
+
+  - task: "Shared site-content endpoints regression"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Regression testing: GET /api/ returns {'message': 'Hello World'} (200). POST /api/create-order with amount=999 INR creates valid Razorpay order with orderId starting 'order_' and keyId starting 'rzp_live_'. All existing endpoints still working correctly after adding new site-content endpoints."
+
 frontend:
   - task: "Frontend testing"
     implemented: false
@@ -253,13 +313,13 @@ frontend:
 metadata:
   created_by: "testing_agent"
   version: "1.0"
-  test_sequence: 2
+  test_sequence: 3
   run_ui: false
 
 test_plan:
   current_focus:
-    - "All Google Auth endpoints tested and working"
-    - "All Razorpay backend endpoints regression tested and working"
+    - "Shared site-content endpoints tested and working"
+    - "All backend endpoints regression tested and working"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -271,3 +331,5 @@ agent_communication:
     message: "Completed comprehensive frontend UI/UX testing of Rehabilified physiotherapy website. ALL 8 TESTS PASSED: (1) Mobile nav hamburger menu - all links present, no Admin link, proper scrolling behavior, (2) Hero desktop - single 'Book Patient Appointment' button, old buttons removed, (3) Admin NOT in top nav - confirmed, (4) Footer - Instagram link '@rehabilified' fits on one line, Admin link present, (5) Testimonials carousel - single sliding card with arrows and dots working, (6) Patient appointment WhatsApp - form submits to wa.me/917303995608 with patient details, (7) Courses - 'Buy · ₹...' buttons, 'Instant access link after payment' text, NO modules/lessons text, (8) Admin security - session locks on exit, password required again. No critical issues found. All requested features working correctly."
   - agent: "testing"
     message: "Completed comprehensive testing of Google Auth endpoints and Razorpay regression testing. ALL 9 TESTS PASSED: SECTION A (Google Auth): (A1) GET /api/auth/me without token correctly returns 401, (A2) GET /api/auth/me with Bearer token returns 200 with correct user data and no _id field, (A3) GET /api/auth/me with cookie returns 200, (A4) POST /api/auth/logout returns 200 with ok:true, (A5) GET /api/auth/me after logout correctly returns 401 (session deleted), (A6) POST /api/auth/session with invalid session_id correctly returns 401. SECTION B (Razorpay Regression): (B7) GET /api/ returns Hello World, (B8) POST /api/create-order creates valid order with LIVE keys (no charge), (B9) POST /api/verify-payment with bad signature correctly returns 400. All authentication flows working correctly. All payment endpoints working correctly. No critical issues found."
+  - agent: "testing"
+    message: "Completed comprehensive testing of shared site-content endpoints. ALL 5 TESTS PASSED: (C1) PUT /api/content with initial data returns 200 with ok:true, (C2) GET /api/content returns correct data with CROSS_DEVICE_MARKER_9988 and no _id field, (C3) PUT /api/content with different marker (CROSS_DEVICE_MARKER_0001) correctly overwrites data (verified via GET), (C4) MongoDB site_content collection has exactly ONE document with _id='singleton' containing latest marker, (C5) Regression tests passed - GET /api/ returns Hello World and POST /api/create-order creates valid Razorpay order. Singleton pattern correctly implemented - Admin edits are stored on server and shared across all devices. No critical issues found."

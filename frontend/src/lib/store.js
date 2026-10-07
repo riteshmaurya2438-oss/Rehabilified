@@ -271,6 +271,59 @@ export const useDB = create()(
   ),
 );
 
+/* ---------- Server sync: Admin edits are shared across ALL devices ---------- */
+const CONTENT_API = `${process.env.REACT_APP_BACKEND_URL}/api/content`;
+let _hydrating = false;
+let _syncTimer;
+
+function contentSnapshot(s) {
+  return { lectures: s.lectures, courses: s.courses, testimonials: s.testimonials, faqs: s.faqs, stats: s.stats, settings: s.settings, slots: s.slots };
+}
+function pushContent() {
+  try {
+    fetch(CONTENT_API, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(contentSnapshot(useDB.getState())) }).catch(() => {});
+  } catch (e) {
+    /* ignore */
+  }
+}
+let _prevContent = JSON.stringify(contentSnapshot(useDB.getState()));
+useDB.subscribe((s) => {
+  if (_hydrating) return;
+  const cur = JSON.stringify(contentSnapshot(s));
+  if (cur !== _prevContent) {
+    _prevContent = cur;
+    clearTimeout(_syncTimer);
+    _syncTimer = setTimeout(pushContent, 500);
+  }
+});
+
+export async function hydrateContent() {
+  try {
+    const res = await fetch(CONTENT_API);
+    if (!res.ok) return;
+    const d = await res.json();
+    if (d && Array.isArray(d.lectures)) {
+      _hydrating = true;
+      useDB.setState({
+        lectures: d.lectures,
+        courses: d.courses ?? [],
+        testimonials: d.testimonials ?? [],
+        faqs: d.faqs ?? [],
+        stats: d.stats ?? [],
+        settings: d.settings ?? useDB.getState().settings,
+        slots: d.slots ?? [],
+      });
+      _prevContent = JSON.stringify(contentSnapshot(useDB.getState()));
+      _hydrating = false;
+    } else {
+      // Server has no content yet — seed it from this device's current content.
+      pushContent();
+    }
+  } catch (e) {
+    /* offline — keep local cache */
+  }
+}
+
 /* ---------- Student session ---------- */
 export const useSession = create()(
   persist(

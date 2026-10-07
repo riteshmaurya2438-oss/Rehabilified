@@ -3,6 +3,7 @@ import { HashRouter, Link, Route, Routes, useLocation, useNavigate } from 'react
 import { AnimatePresence, motion } from 'framer-motion';
 import toast, { Toaster } from 'react-hot-toast';
 import { useSession } from './lib/store';
+import { hydrateContent } from './lib/store';
 import { Navbar } from './components/Navbar';
 import { Footer, WhatsAppFloat } from './components/Footer';
 import { Hero } from './components/Hero';
@@ -98,6 +99,7 @@ function Shell() {
 
   // Restore an existing Google session on load
   useEffect(() => {
+    hydrateContent();
     if (window.location.hash.includes('session_id=')) return;
     fetch(`${API}/auth/me`, { credentials: 'include' })
       .then((r) => (r.ok ? r.json() : null))

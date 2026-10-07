@@ -55,9 +55,9 @@ export function Overview({ go }) {
       <div className="mt-10 rounded-2xl bg-sky p-5 text-sm leading-relaxed text-navy/75">
         <p className="font-bold text-navy">How this works</p>
         <ul className="mt-2 list-disc space-y-1 pl-5">
-          <li>Everything on the public website reads from here. Add, edit or delete and the site updates instantly.</li>
-          <li>Testimonials, homepage numbers, Meet/Zoom links and lesson videos are <strong>placeholders</strong> until you replace them.</li>
-          <li>Data is currently stored in this browser (demo mode). See the Security tab for how to go fully live.</li>
+          <li>Your content (lectures, courses, testimonials, FAQs, numbers, settings) is saved on the server, so edits appear on <strong>every device</strong> for all visitors.</li>
+          <li>Testimonials, homepage numbers and course links are <strong>placeholders</strong> until you replace them.</li>
+          <li>Payments are verified securely on the server. See the Security tab for details.</li>
         </ul>
       </div>
       <button
@@ -655,7 +655,7 @@ export function SecurityTab({ onLock }) {
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm leading-relaxed text-amber-900">
         <p className="font-bold">An honest note on the limits</p>
         <p className="mt-1">
-          This panel locks the admin screen in <strong>this browser</strong>. While the website stores its data in the browser (demo mode), nothing is shared between devices. For a live site where visitors&rsquo; registrations reach you and admin access is enforced by a server, connect a backend (server-side login, database row-level security, Razorpay verification).
+          This panel locks the admin screen in <strong>this browser</strong>, and your <strong>content now syncs to the server</strong> so edits show on every device. For a fully hardened setup (server-enforced admin login, per-row database security) you can extend the backend further. Payments are already verified server-side.
         </p>
       </div>
 
