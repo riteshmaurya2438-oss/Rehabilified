@@ -74,14 +74,8 @@ function seed() {
           'A structured, video-led programme on ICU rehabilitation: from understanding monitors and lines to progressive mobilisation and team communication.',
         thumbnail: '',
         price: 2499,
+        link: 'https://your-course-link.example.com/icu-foundations',
         published: true,
-        lessons: [
-          L('l1', 'Module 1 \u00b7 The ICU Environment', 'Reading the monitor, lines and tubes', '18 min'),
-          L('l2', 'Module 1 \u00b7 The ICU Environment', 'Safety screening before you touch the patient', '22 min'),
-          L('l3', 'Module 1 \u00b7 The ICU Environment', 'Working with the ICU team', '14 min'),
-          L('l4', 'Module 2 \u00b7 Early Mobilisation', 'Mobility levels and progression criteria', '26 min'),
-          L('l5', 'Module 2 \u00b7 Early Mobilisation', 'Case walkthrough: ventilated patient', '31 min'),
-        ],
       },
       {
         id: 'course-clinical-reasoning',
@@ -90,13 +84,8 @@ function seed() {
           'Build the thinking habits of a confident clinician: structured assessment, hypothesis testing, outcome measures and goal setting.',
         thumbnail: '',
         price: 1799,
+        link: 'https://your-course-link.example.com/clinical-reasoning',
         published: true,
-        lessons: [
-          L('m1', 'Module 1 \u00b7 Foundations', 'What clinical reasoning really is', '16 min'),
-          L('m2', 'Module 1 \u00b7 Foundations', 'The subjective examination that guides you', '24 min'),
-          L('m3', 'Module 2 \u00b7 In Practice', 'Choosing outcome measures', '19 min'),
-          L('m4', 'Module 2 \u00b7 In Practice', 'Writing goals patients care about', '21 min'),
-        ],
       },
     ],
     slots: seedSlots(),
@@ -145,7 +134,7 @@ function seed() {
       { id: 's3', label: 'Workshops & talks delivered', value: 40, suffix: '+' },
       { id: 's4', label: 'Average learner rating', value: 4.9, suffix: '/5' },
     ],
-    settings: { consultationPrice: 999, whatsapp: '917303995608', instagram: 'cardiopulmonaryrehab', email: '' },
+    settings: { consultationPrice: 999, whatsapp: '917303995608', instagram: 'rehabilified', instagramUrl: 'https://www.instagram.com/rehabilified?stkn=MXM5M2xuNzJuYXMzbg==', email: '' },
     progress: {},
   };
 }
@@ -278,7 +267,7 @@ export const useDB = create()(
 
       resetAll: () => set({ ...seed() }),
     }),
-    { name: 'rehabilified-db-v3' },
+    { name: 'rehabilified-db-v4' },
   ),
 );
 

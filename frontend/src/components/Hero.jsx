@@ -53,13 +53,8 @@ export function Hero() {
 
           <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, delay: 2.75, ease: EASE }} className="mt-8 flex flex-col gap-3 sm:mt-9 sm:flex-row sm:flex-wrap sm:gap-4">
             <Magnetic className="block sm:inline-block">
-              <button onClick={() => scrollToId('lectures')} className="btn btn-primary w-full px-8 py-4 text-base sm:w-auto">
-                Register for Lecture <ArrowRight className="h-4 w-4" />
-              </button>
-            </Magnetic>
-            <Magnetic className="block sm:inline-block">
-              <button onClick={() => scrollToId('consultation')} className="btn btn-outline w-full px-8 py-4 text-base sm:w-auto">
-                Book 1:1 Consultation
+              <button onClick={() => scrollToId('appointment')} className="btn btn-primary w-full px-8 py-4 text-base sm:w-auto">
+                Book Patient Appointment <ArrowRight className="h-4 w-4" />
               </button>
             </Magnetic>
           </motion.div>

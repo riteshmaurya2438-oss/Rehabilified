@@ -10,7 +10,7 @@ import { AppointmentSection, ConsultationSection, CoursesSection, LecturesSectio
 import { HowItWorks, Splash, TopicsMarquee } from './components/Extras';
 import { AuthModal, CheckoutModal, PayModal } from './components/Modals';
 import { Admin } from './pages/admin/AdminApp';
-import { Dashboard, Learn } from './pages/Dashboard';
+import { Dashboard } from './pages/Dashboard';
 import { ThankYou } from './pages/ThankYou';
 import { useSEO } from './lib/seo';
 import { EASE } from './components/ui';
@@ -105,7 +105,6 @@ function Shell() {
             <Route path="/" element={<Home />} />
             <Route path="/thank-you/:type/:id" element={<ThankYou />} />
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/learn/:courseId" element={<Learn />} />
             <Route path="/admin" element={<Admin />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

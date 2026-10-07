@@ -26,7 +26,6 @@ export function Overview({ go }) {
     ['Add a lecture', 'lectures'],
     ['Add a course', 'courses'],
     ['Open new slots', 'slots'],
-    ['Upload logo & photo', 'brand'],
   ];
   return (
     <div>
@@ -122,16 +121,17 @@ export function Courses() {
   const del = useDB((s) => s.removeCourse);
   return (
     <ResourceManager
-      title="Courses & lessons"
+      title="Courses"
       noun="Course"
       items={items}
       onSave={save}
       onDelete={del}
-      blank={() => ({ id: newId(), title: '', description: '', thumbnail: '', price: 999, lessons: [], published: true })}
+      blank={() => ({ id: newId(), title: '', description: '', thumbnail: '', price: 999, link: '', published: true })}
       fields={[
         { key: 'title', label: 'Course title', type: 'text', required: true },
         { key: 'price', label: 'Price (\u20b9)', type: 'number' },
         { key: 'description', label: 'Description', type: 'textarea', required: true },
+        { key: 'link', label: 'Course access link', type: 'url', required: true, hint: 'Buyers get this link automatically after a successful payment (e.g. Google Drive, Notion, YouTube playlist).' },
         { key: 'thumbnail', label: 'Thumbnail image URL', type: 'url', hint: 'Optional. A blue gradient is used if empty' },
         { key: 'published', label: 'Published (visible on website)', type: 'checkbox' },
       ]}
@@ -140,42 +140,11 @@ export function Courses() {
           <p className="truncate font-bold">
             {c.title} {!c.published && <Pill ok={false}>Hidden</Pill>}
           </p>
-          <p className="text-xs text-navy/55">
-            {inr(c.price)} &middot; {c.lessons.length} lessons
+          <p className="truncate text-xs text-navy/55">
+            {inr(c.price)} &middot; {c.link || 'No link set'}
           </p>
         </>
       )}
-      extra={(d, set) => {
-        const patch = (i, k, v) => set({ ...d, lessons: d.lessons.map((l, n) => (n === i ? { ...l, [k]: v } : l)) });
-        return (
-          <div className="mt-8">
-            <div className="flex items-center justify-between">
-              <h4 className="font-bold">Modules & lessons</h4>
-              <button
-                type="button"
-                className="btn btn-outline !py-2"
-                onClick={() => set({ ...d, lessons: [...d.lessons, { id: newId(), module: d.lessons[d.lessons.length - 1]?.module ?? 'Module 1', title: '', videoUrl: '', duration: '' }] })}
-              >
-                <Plus className="h-4 w-4" /> Add lesson
-              </button>
-            </div>
-            <p className="mt-1 text-xs text-navy/50">Lessons with the same module name are grouped together.</p>
-            <div className="mt-3 space-y-3">
-              {d.lessons.map((l, i) => (
-                <div key={l.id} className="grid gap-2 rounded-2xl bg-mist p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.4fr)_5.5rem_auto]">
-                  <input className="field !py-2" placeholder="Module name" value={l.module} onChange={(e) => patch(i, 'module', e.target.value)} />
-                  <input className="field !py-2" placeholder="Lesson title" value={l.title} onChange={(e) => patch(i, 'title', e.target.value)} />
-                  <input className="field !py-2" placeholder="Video URL (mp4)" value={l.videoUrl} onChange={(e) => patch(i, 'videoUrl', e.target.value)} />
-                  <input className="field !py-2" placeholder="18 min" value={l.duration} onChange={(e) => patch(i, 'duration', e.target.value)} />
-                  <button type="button" className="btn !px-3 !py-2 text-red-600 hover:bg-red-50" aria-label="Remove lesson" onClick={() => set({ ...d, lessons: d.lessons.filter((_, n) => n !== i) })}>
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      }}
     />
   );
 }

@@ -82,14 +82,13 @@ export function CoursesSection() {
   return (
     <section id="courses" className="py-24 sm:py-32">
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
-        <SectionHeading eyebrow="Courses" title="Learn at your own pace" sub="Structured video courses with modules you can revisit anytime. Lessons unlock the moment your payment is confirmed." />
+        <SectionHeading eyebrow="Courses" title="Learn at your own pace" sub="Self-paced courses by Dr. Sayyeda. Buy once and get instant access to the course link \u2014 no login hassle." />
         {courses.length === 0 ? (
           <p className="mt-14 text-center text-navy/60">Courses are coming soon.</p>
         ) : (
           <div className="mt-14 grid gap-8 md:grid-cols-2">
             {courses.map((c, i) => {
               const owned = !!user && enrollments.some((e) => e.courseId === c.id && e.userId === user.id);
-              const modules = new Set(c.lessons.map((l) => l.module)).size;
               return (
                 <Reveal key={c.id} delay={i * 0.1} className="h-full">
                   <article className="card flex h-full flex-col overflow-hidden !p-0">
@@ -106,15 +105,14 @@ export function CoursesSection() {
                     <div className="flex flex-1 flex-col p-6">
                       <h3 className="text-xl font-bold text-navy">{c.title}</h3>
                       <p className="mt-3 flex-1 text-sm leading-relaxed text-navy/65">{c.description}</p>
-                      <p className="mt-4 flex items-center gap-4 text-xs font-medium text-navy/60">
-                        <span className="inline-flex items-center gap-1.5"><BookOpen className="h-3.5 w-3.5 text-royal" />{modules} modules</span>
-                        <span className="inline-flex items-center gap-1.5"><Play className="h-3.5 w-3.5 text-royal" />{c.lessons.length} lessons</span>
+                      <p className="mt-4 flex items-center gap-2 text-xs font-medium text-navy/60">
+                        <ShieldCheck className="h-3.5 w-3.5 text-royal" /> Instant access link after payment
                       </p>
                       {owned ? (
-                        <Link to={`/learn/${c.id}`} className="btn btn-outline mt-5 w-full">Continue learning <ArrowRight className="h-4 w-4" /></Link>
+                        <a href={c.link} target="_blank" rel="noopener noreferrer" className="btn btn-outline mt-5 w-full">Open course <ExternalLink className="h-4 w-4" /></a>
                       ) : (
                         <button className="btn btn-primary mt-5 w-full" onClick={() => openCheckout({ kind: 'course', refId: c.id })}>
-                          Enroll &middot; {inr(c.price)} <ArrowRight className="h-4 w-4" />
+                          Buy &middot; {inr(c.price)} <ArrowRight className="h-4 w-4" />
                         </button>
                       )}
                     </div>
@@ -364,37 +362,36 @@ export function ConsultationSection() {
 
 /* ---------------- 7. Patient appointment ---------------- */
 export function AppointmentSection() {
-  const request = useDB((s) => s.requestAppointment);
+  const whatsapp = useDB((s) => s.settings.whatsapp);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [concern, setConcern] = useState('');
-  const [slotId, setSlotId] = useState('');
-  const [done, setDone] = useState(null);
+  const [prefDate, setPrefDate] = useState('');
+  const [prefTime, setPrefTime] = useState('');
 
   function submit(e) {
     e.preventDefault();
     if (name.trim().length < 2) return void toast.error('Please enter your name.');
     if (phone.replace(/\D/g, '').length < 10) return void toast.error('Please enter a valid phone number.');
     if (concern.trim().length < 10) return void toast.error('Please describe your concern in a few words.');
-    if (!slotId) return void toast.error('Please choose a date and time slot.');
-    const r = request({ slotId, name: name.trim(), phone: phone.trim(), concern: concern.trim() });
-    if (!r.ok) {
-      toast.error(r.error);
-      setSlotId('');
-      return;
-    }
-    setDone(r.data);
-    setName('');
-    setPhone('');
-    setConcern('');
-    setSlotId('');
-    toast.success('Appointment request sent!');
+    const lines = [
+      'Hello Dr. Sayyeda, I would like to book a physiotherapy appointment.',
+      '',
+      `Name: ${name.trim()}`,
+      `Phone: ${phone.trim()}`,
+      `Concern: ${concern.trim()}`,
+    ];
+    if (prefDate) lines.push(`Preferred date: ${fmtDate(prefDate)}`);
+    if (prefTime.trim()) lines.push(`Preferred time: ${prefTime.trim()}`);
+    const text = encodeURIComponent(lines.join('\n'));
+    window.open(`https://wa.me/${whatsapp}?text=${text}`, '_blank', 'noopener');
+    toast.success('Opening WhatsApp with your details\u2026');
   }
 
   return (
     <section id="appointment" className="py-24 sm:py-32">
       <div className="mx-auto max-w-5xl px-5 sm:px-8">
-        <SectionHeading eyebrow="Patient appointment" title="Request a physiotherapy appointment" sub="For non-urgent physiotherapy concerns. Choose a convenient slot and our team will confirm with you." />
+        <SectionHeading eyebrow="Patient appointment" title="Book a physiotherapy appointment" sub="For non-urgent physiotherapy concerns. Fill your details and continue on WhatsApp \u2014 Dr. Sayyeda's team will confirm your appointment directly with you." />
         <Reveal delay={0.1} className="mt-10">
           <div className="flex gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
             <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0" />
@@ -403,35 +400,34 @@ export function AppointmentSection() {
         </Reveal>
 
         <Reveal delay={0.15} className="mt-8">
-          {done ? (
-            <div className="rounded-3xl border border-royal/10 bg-sky p-10 text-center">
-              <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-royal text-white"><Check className="h-7 w-7" /></span>
-              <h3 className="mt-5 text-2xl font-bold">Request received</h3>
-              <p className="mt-2 text-navy/65">{fmtDate(done.date)} at {fmtTime(done.time)} IST is held for you. Our team will confirm shortly on the number you provided.</p>
-              <button className="btn btn-outline mt-6" onClick={() => setDone(null)}>Make another request</button>
+          <form onSubmit={submit} className="grid gap-6 rounded-3xl border border-royal/10 bg-white p-6 shadow-xl shadow-royal/10 sm:p-8 lg:grid-cols-2">
+            <div className="space-y-4">
+              <div>
+                <label className="label" htmlFor="ap-name">Full name</label>
+                <input id="ap-name" className="field" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
+              </div>
+              <div>
+                <label className="label" htmlFor="ap-phone">Phone number</label>
+                <input id="ap-phone" type="tel" className="field" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98765 43210" autoComplete="tel" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label" htmlFor="ap-date">Preferred date</label>
+                  <input id="ap-date" type="date" className="field" value={prefDate} min={todayISO()} onChange={(e) => setPrefDate(e.target.value)} />
+                </div>
+                <div>
+                  <label className="label" htmlFor="ap-time">Preferred time</label>
+                  <input id="ap-time" className="field" value={prefTime} onChange={(e) => setPrefTime(e.target.value)} placeholder="e.g. 5 PM" />
+                </div>
+              </div>
             </div>
-          ) : (
-            <form onSubmit={submit} className="grid gap-8 rounded-3xl border border-royal/10 bg-white p-6 shadow-xl shadow-royal/10 sm:p-8 lg:grid-cols-2">
-              <div className="space-y-4">
-                <div>
-                  <label className="label" htmlFor="ap-name">Full name</label>
-                  <input id="ap-name" className="field" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
-                </div>
-                <div>
-                  <label className="label" htmlFor="ap-phone">Phone number</label>
-                  <input id="ap-phone" type="tel" className="field" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98765 43210" autoComplete="tel" />
-                </div>
-                <div>
-                  <label className="label" htmlFor="ap-concern">Your concern</label>
-                  <textarea id="ap-concern" rows={5} className="field" value={concern} onChange={(e) => setConcern(e.target.value)} placeholder={'e.g. knee pain for 3 weeks after a fall, stiffness in the morning\u2026'} />
-                </div>
-              </div>
-              <div className="flex flex-col">
-                <SlotPicker kind="patient" selected={slotId} onSelect={setSlotId} />
-                <button className="btn btn-primary mt-auto w-full py-3.5 lg:mt-6">Request appointment</button>
-              </div>
-            </form>
-          )}
+            <div className="flex flex-col">
+              <label className="label" htmlFor="ap-concern">Your concern</label>
+              <textarea id="ap-concern" rows={6} className="field flex-1" value={concern} onChange={(e) => setConcern(e.target.value)} placeholder={'e.g. knee pain for 3 weeks after a fall, stiffness in the morning\u2026'} />
+              <button className="btn btn-primary mt-4 w-full py-3.5">Continue on WhatsApp</button>
+              <p className="mt-2 text-center text-xs text-navy/50">You\u2019ll be taken to WhatsApp with your details ready to send.</p>
+            </div>
+          </form>
         </Reveal>
       </div>
     </section>

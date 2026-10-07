@@ -38,8 +38,8 @@ export function ThankYou() {
     if (e && c) {
       found = true;
       email = e.email; title = c.title; amount = e.amount;
-      detail = `${c.lessons.length} lessons unlocked`;
-      next = { to: `/learn/${c.id}`, label: 'Start learning' };
+      detail = `Instant access \u2014 open your course from the dashboard`;
+      next = { to: `/dashboard`, label: 'Open my dashboard' };
     }
   } else if (type === 'consultation') {
     const b = bookings.find((x) => x.id === id);

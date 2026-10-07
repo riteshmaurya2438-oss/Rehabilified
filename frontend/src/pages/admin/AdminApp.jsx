@@ -274,12 +274,18 @@ function Shell() {
         audit('Auto-locked', 'Session expired');
         toast('Locked after inactivity. Please sign in again.', { icon: '\ud83d\udd12' });
       }
-    }, 15000);
+    }, 10000);
+    // Lock immediately when the admin leaves: tab close, refresh or navigating away.
+    const onExit = () => end();
+    window.addEventListener('beforeunload', onExit);
+    window.addEventListener('pagehide', onExit);
     return () => {
       evs.forEach((e) => window.removeEventListener(e, bump));
       window.clearInterval(iv);
+      window.removeEventListener('beforeunload', onExit);
+      window.removeEventListener('pagehide', onExit);
     };
-  }, [touch, check]);
+  }, [touch, check, end]);
 
   function lock() {
     audit('Signed out');
@@ -319,7 +325,7 @@ function Shell() {
           ))}
         </nav>
         <div className="space-y-2 border-t border-white/10 pt-4">
-          <Link to="/" className="flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-white/65 hover:bg-white/10 hover:text-white">
+          <Link to="/" onClick={end} className="flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-white/65 hover:bg-white/10 hover:text-white">
             View website
           </Link>
           <button onClick={lock} className="flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-white/65 hover:bg-white/10 hover:text-white">
@@ -336,7 +342,7 @@ function Shell() {
               <span className="font-display font-extrabold">Admin</span>
             </div>
             <div className="flex gap-2">
-              <Link to="/" className="btn btn-outline !px-4 !py-2">Site</Link>
+              <Link to="/" onClick={end} className="btn btn-outline !px-4 !py-2">Site</Link>
               <button className="btn btn-ghost !px-3 !py-2" onClick={lock} aria-label="Lock admin"><LogOut className="h-4 w-4" /></button>
             </div>
           </div>

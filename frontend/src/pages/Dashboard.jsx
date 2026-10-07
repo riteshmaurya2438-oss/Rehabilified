@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ArrowRight, Check, Lock, Play, Video } from 'lucide-react';
+import { ArrowRight, Video } from 'lucide-react';
 import { useDB, useSession } from '../lib/store';
 import { useUI } from '../lib/ui';
 import { fmtDate, fmtTime, inr } from '../lib/format';
@@ -30,7 +30,6 @@ export function Dashboard() {
   const enrollments = useDB((s) => s.enrollments);
   const bookings = useDB((s) => s.bookings);
   const slots = useDB((s) => s.slots);
-  const progress = useDB((s) => s.progress);
   const cancelBooking = useDB((s) => s.cancelBooking);
   const [tab, setTab] = useState('reg');
 
@@ -92,21 +91,16 @@ export function Dashboard() {
             );
           }))}
 
-          {tab === 'courses' && (myEnrolls.length === 0 ? <Empty text={'You haven\u2019t enrolled in a course yet.'} to="/" label="Explore courses" /> : myEnrolls.map((e) => {
+          {tab === 'courses' && (myEnrolls.length === 0 ? <Empty text={'You haven\u2019t purchased a course yet.'} to="/" label="Explore courses" /> : myEnrolls.map((e) => {
             const c = courses.find((x) => x.id === e.courseId);
             if (!c) return null;
-            const done = (progress[`${user.id}:${c.id}`] ?? []).length;
-            const pct = c.lessons.length ? Math.round((done / c.lessons.length) * 100) : 0;
             return (
-              <div key={e.id} className="card">
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                  <div>
-                    <h3 className="text-lg font-bold">{c.title}</h3>
-                    <p className="text-sm text-navy/60">{done} of {c.lessons.length} lessons completed</p>
-                  </div>
-                  <Link to={`/learn/${c.id}`} className="btn btn-primary">Open course <ArrowRight className="h-4 w-4" /></Link>
+              <div key={e.id} className="card flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="text-lg font-bold">{c.title}</h3>
+                  <p className="text-sm text-navy/60">Purchased &middot; {inr(e.amount)} &middot; instant access</p>
                 </div>
-                <div className="mt-4 h-2 overflow-hidden rounded-full bg-sky"><div className="h-full rounded-full bg-royal transition-all" style={{ width: `${pct}%` }} /></div>
+                <a href={c.link} target="_blank" rel="noopener noreferrer" className="btn btn-primary shrink-0">Open course <ArrowRight className="h-4 w-4" /></a>
               </div>
             );
           }))}
@@ -130,99 +124,4 @@ export function Dashboard() {
       </div>
     </main>
   );
-}
-
-/* ---------------- Lesson player (locked until paid) ---------------- */
-export function Learn() {
-  const { courseId } = useParams();
-  const user = useSession((s) => s.user);
-  const course = useDB((s) => s.courses.find((c) => c.id === courseId));
-  const enrollments = useDB((s) => s.enrollments);
-  const progress = useDB((s) => s.progress);
-  const toggleLesson = useDB((s) => s.toggleLesson);
-  const openCheckout = useUI((s) => s.openCheckout);
-  const openAuth = useUI((s) => s.openAuth);
-  const [activeId, setActiveId] = useState('');
-  useSEO(course ? `${course.title} | Rehabilified\u2122` : 'Course | Rehabilified\u2122', 'Course lessons from Rehabilified.');
-
-  if (!course) {
-    return (
-      <main className="flex min-h-screen items-center justify-center px-5 pt-24 text-center">
-        <div><h1 className="text-2xl font-extrabold">Course not found</h1><Link to="/" className="btn btn-primary mt-5">Back home</Link></div>
-      </main>
-    );
-  }
-
-  const owned = !!user && enrollments.some((e) => e.courseId === course.id && e.userId === user.id);
-  const key = user ? `${user.id}:${course.id}` : '';
-  const doneIds = progress[key] ?? [];
-  const lesson = course.lessons.find((l) => l.id === activeId) ?? course.lessons[0];
-  const modules = groupByModule(course);
-
-  return (
-    <main className="min-h-screen bg-mist px-5 pb-20 pt-28 sm:px-8">
-      <div className="mx-auto max-w-6xl">
-        <Link to="/dashboard" className="text-sm font-semibold text-royal hover:underline">\u2190 Dashboard</Link>
-        <h1 className="mt-2 text-2xl font-extrabold sm:text-3xl">{course.title}</h1>
-
-        <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-          <div>
-            {owned && lesson ? (
-              <div className="overflow-hidden rounded-3xl bg-white shadow-xl shadow-royal/10">
-                <video key={lesson.id} src={lesson.videoUrl} controls controlsList="nodownload" className="aspect-video w-full bg-navy" />
-                <div className="flex flex-wrap items-center justify-between gap-3 p-5">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-widest text-royal">{lesson.module}</p>
-                    <h2 className="text-lg font-bold">{lesson.title}</h2>
-                  </div>
-                  <button className={cn('btn', doneIds.includes(lesson.id) ? 'btn-outline' : 'btn-primary')} onClick={() => toggleLesson(key, lesson.id)}>
-                    <Check className="h-4 w-4" /> {doneIds.includes(lesson.id) ? 'Completed' : 'Mark as complete'}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex aspect-video flex-col items-center justify-center rounded-3xl bg-gradient-to-br from-navy to-royal-dark p-8 text-center text-white shadow-xl">
-                <Lock className="h-12 w-12" />
-                <h2 className="mt-4 text-2xl font-extrabold">This course is locked</h2>
-                <p className="mt-2 max-w-sm text-sm text-white/75">Enroll to unlock all {course.lessons.length} video lessons instantly after payment.</p>
-                <button className="btn mt-6 bg-white text-royal hover:bg-sky" onClick={() => (user ? openCheckout({ kind: 'course', refId: course.id }) : openAuth())}>
-                  {user ? `Enroll \u00b7 ${inr(course.price)}` : 'Sign in to enroll'}
-                </button>
-              </div>
-            )}
-          </div>
-
-          <aside className="rounded-3xl bg-white p-5 shadow-sm">
-            <h3 className="font-bold">Course content</h3>
-            <div className="mt-4 space-y-5">
-              {modules.map(([mod, lessons]) => (
-                <div key={mod}>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-navy/50">{mod}</p>
-                  <ul className="mt-2 space-y-1.5">
-                    {lessons.map((l) => (
-                      <li key={l.id}>
-                        <button disabled={!owned} onClick={() => setActiveId(l.id)} className={cn('flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition', lesson?.id === l.id && owned ? 'bg-sky font-semibold text-royal' : 'hover:bg-mist', !owned && 'cursor-not-allowed opacity-70')}>
-                          <span className={cn('flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white', owned ? (doneIds.includes(l.id) ? 'bg-emerald-500' : 'bg-royal') : 'bg-navy/30')}>
-                            {!owned ? <Lock className="h-3 w-3" /> : doneIds.includes(l.id) ? <Check className="h-3 w-3" /> : <Play className="h-3 w-3" />}
-                          </span>
-                          <span className="flex-1">{l.title}</span>
-                          <span className="text-xs text-navy/45">{l.duration}</span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          </aside>
-        </div>
-      </div>
-    </main>
-  );
-}
-
-function groupByModule(course) {
-  const map = new Map();
-  course.lessons.forEach((l) => map.set(l.module, [...(map.get(l.module) ?? []), l]));
-  return Array.from(map.entries());
 }

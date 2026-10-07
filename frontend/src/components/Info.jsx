@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion, useScroll, useTransform } from 'framer-motion';
-import { Check, ChevronDown, GraduationCap, Globe, Medal, Star, Stethoscope } from 'lucide-react';
+import { Check, ChevronDown, ChevronLeft, ChevronRight, GraduationCap, Globe, Medal, Star, Stethoscope } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { CountUp, FloatingShapes, FounderPhoto, IconInstagram, IconWhatsApp, Reveal, SectionHeading } from './ui';
 import { useDB } from '../lib/store';
@@ -105,32 +105,70 @@ export function About() {
 /* ---------------- 8a. Testimonials ---------------- */
 export function Testimonials() {
   const items = useDB((s) => s.testimonials).filter((t) => t.published);
-  if (!items.length) return null;
+  const reduce = useReducedMotion();
+  const [i, setI] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const count = items.length;
+
+  useEffect(() => {
+    if (count <= 1 || paused || reduce) return undefined;
+    const t = window.setInterval(() => setI((n) => (n + 1) % count), 5500);
+    return () => window.clearInterval(t);
+  }, [count, paused, reduce]);
+
+  if (!count) return null;
+  const active = Math.min(i, count - 1);
+  const go = (n) => setI(((n % count) + count) % count);
+
   return (
-    <section id="testimonials" className="relative overflow-hidden bg-mist py-24 sm:py-32">
+    <section id="testimonials" className="relative overflow-hidden bg-mist py-20 sm:py-24">
       <FloatingShapes />
-      <div className="relative mx-auto max-w-7xl px-5 sm:px-8">
+      <div className="relative mx-auto max-w-3xl px-5 sm:px-8">
         <SectionHeading eyebrow="Testimonials" title="What learners say" sub="Honest feedback from students and clinicians who learned with Rehabilified." />
-        <div className="mt-14 grid gap-6 md:grid-cols-3">
-          {items.map((t, i) => (
-            <Reveal key={t.id} delay={i * 0.1} className="h-full">
-              <figure className="card flex h-full flex-col">
-                <div className="flex gap-0.5 text-royal" aria-label={`${t.rating} out of 5 stars`}>
+
+        <div className="relative mt-12" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
+          <div className="overflow-hidden">
+            <AnimatePresence mode="wait">
+              <motion.figure
+                key={items[active].id}
+                initial={{ opacity: 0, x: 40 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -40 }}
+                transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                className="mx-auto flex flex-col items-center rounded-3xl border border-royal/10 bg-white p-8 text-center shadow-sm sm:p-10"
+              >
+                <div className="flex gap-0.5 text-royal" aria-label={`${items[active].rating} out of 5 stars`}>
                   {Array.from({ length: 5 }).map((_, k) => (
-                    <Star key={k} className={cn('h-4 w-4', k < t.rating ? 'fill-royal' : 'text-navy/20')} />
+                    <Star key={k} className={cn('h-5 w-5', k < items[active].rating ? 'fill-royal' : 'text-navy/20')} />
                   ))}
                 </div>
-                <blockquote className="mt-4 flex-1 text-base leading-relaxed text-navy/75">&ldquo;{t.text}&rdquo;</blockquote>
+                <blockquote className="mt-5 text-lg leading-relaxed text-navy/80 sm:text-xl">&ldquo;{items[active].text}&rdquo;</blockquote>
                 <figcaption className="mt-6 flex items-center gap-3">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-royal font-bold text-white">{t.name.charAt(0)}</span>
-                  <span>
-                    <span className="block text-sm font-bold text-navy">{t.name}</span>
-                    <span className="block text-xs text-navy/55">{t.role}</span>
+                  <span className="flex h-11 w-11 items-center justify-center rounded-full bg-royal text-lg font-bold text-white">{items[active].name.charAt(0)}</span>
+                  <span className="text-left">
+                    <span className="block text-sm font-bold text-navy">{items[active].name}</span>
+                    <span className="block text-xs text-navy/55">{items[active].role}</span>
                   </span>
                 </figcaption>
-              </figure>
-            </Reveal>
-          ))}
+              </motion.figure>
+            </AnimatePresence>
+          </div>
+
+          {count > 1 && (
+            <>
+              <button onClick={() => go(active - 1)} aria-label="Previous testimonial" className="absolute -left-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-royal/15 bg-white text-royal shadow-md transition hover:bg-sky sm:-left-5">
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              <button onClick={() => go(active + 1)} aria-label="Next testimonial" className="absolute -right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-royal/15 bg-white text-royal shadow-md transition hover:bg-sky sm:-right-5">
+                <ChevronRight className="h-5 w-5" />
+              </button>
+              <div className="mt-6 flex justify-center gap-2">
+                {items.map((t, k) => (
+                  <button key={t.id} onClick={() => setI(k)} aria-label={`Go to testimonial ${k + 1}`} className={cn('h-2 rounded-full transition-all', k === active ? 'w-6 bg-royal' : 'w-2 bg-royal/25 hover:bg-royal/40')} />
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </section>
@@ -207,13 +245,13 @@ export function Contact() {
                 <span className="block font-semibold">+91 73039 95608</span>
               </span>
             </a>
-            <a href={`https://instagram.com/${settings.instagram}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-4 rounded-2xl bg-white/10 p-4 transition hover:bg-white/15">
+            <a href={settings.instagramUrl || `https://instagram.com/${settings.instagram}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-4 rounded-2xl bg-white/10 p-4 transition hover:bg-white/15">
               <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-royal">
                 <IconInstagram className="h-5 w-5" />
               </span>
               <span>
                 <span className="block text-sm text-white/60">Instagram</span>
-                <span className="block font-semibold">instagram.com/{settings.instagram}</span>
+                <span className="block font-semibold">@{settings.instagram}</span>
               </span>
             </a>
           </div>

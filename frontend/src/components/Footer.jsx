@@ -47,13 +47,13 @@ export function Footer() {
           <h4 className="text-sm font-bold uppercase tracking-widest text-white/50">Connect</h4>
           <ul className="mt-4 space-y-3 text-sm">
             <li>
-              <a href={`https://instagram.com/${settings.instagram}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-white/75 hover:text-white">
-                <IconInstagram className="h-4 w-4" /> instagram.com/{settings.instagram}
+              <a href={settings.instagramUrl || `https://instagram.com/${settings.instagram}`} target="_blank" rel="noopener noreferrer" className="inline-flex max-w-full items-center gap-2 text-white/75 hover:text-white">
+                <IconInstagram className="h-4 w-4 shrink-0" /> <span className="truncate">@{settings.instagram}</span>
               </a>
             </li>
             <li>
-              <a href={`https://wa.me/${settings.whatsapp}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-white/75 hover:text-white">
-                <IconWhatsApp className="h-4 w-4" /> +{settings.whatsapp.replace(/^(\d{2})(\d{5})(\d+)$/, '$1 $2 $3')}
+              <a href={`https://wa.me/${settings.whatsapp}`} target="_blank" rel="noopener noreferrer" className="inline-flex max-w-full items-center gap-2 text-white/75 hover:text-white">
+                <IconWhatsApp className="h-4 w-4 shrink-0" /> <span className="truncate">+{settings.whatsapp.replace(/^(\d{2})(\d{5})(\d+)$/, '$1 $2 $3')}</span>
               </a>
             </li>
           </ul>

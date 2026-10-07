@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion, useScroll, useSpring } from 'framer-motion';
-import { Lock, Menu, X } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 import { Logo, Magnetic } from './ui';
 import { scrollToId } from '../lib/format';
 import { useSession } from '../lib/store';
@@ -39,7 +39,7 @@ export function Navbar() {
       navigate('/');
       window.setTimeout(() => scrollToId(id), 500);
     } else {
-      scrollToId(id);
+      window.setTimeout(() => scrollToId(id), 80);
     }
   }
 
@@ -69,9 +69,6 @@ export function Navbar() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Link to="/admin" className="btn btn-ghost hidden !px-4 !py-2.5 lg:inline-flex" aria-label="Admin panel">
-            <Lock className="h-4 w-4" /> Admin
-          </Link>
           {user ? (
             <Link to="/dashboard" className="btn btn-outline hidden !py-2.5 sm:inline-flex">
               My dashboard
@@ -82,8 +79,8 @@ export function Navbar() {
             </button>
           )}
           <Magnetic className="hidden sm:inline-block">
-            <button onClick={() => go('lectures')} className="btn btn-primary !py-2.5">
-              Register
+            <button onClick={() => go('appointment')} className="btn btn-primary !py-2.5">
+              Book Appointment
             </button>
           </Magnetic>
           <button className="rounded-full p-2.5 text-navy hover:bg-sky lg:hidden" onClick={() => setOpen((o) => !o)} aria-label="Toggle menu" aria-expanded={open}>
@@ -101,9 +98,6 @@ export function Navbar() {
                   {label}
                 </button>
               ))}
-              <Link to="/admin" onClick={() => setOpen(false)} className="flex w-full items-center gap-2 rounded-xl px-4 py-3 text-left text-base font-medium text-navy/80 hover:bg-sky">
-                <Lock className="h-4 w-4" /> Admin panel
-              </Link>
               <div className="flex gap-2 pt-3">
                 {user ? (
                   <Link to="/dashboard" onClick={() => setOpen(false)} className="btn btn-outline flex-1">
@@ -120,8 +114,8 @@ export function Navbar() {
                     Sign in
                   </button>
                 )}
-                <button onClick={() => go('lectures')} className="btn btn-primary flex-1">
-                  Register
+                <button onClick={() => go('appointment')} className="btn btn-primary flex-1">
+                  Book Appointment
                 </button>
               </div>
             </div>
