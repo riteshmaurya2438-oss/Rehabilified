@@ -11,6 +11,13 @@ import uuid
 from datetime import datetime, timezone, timedelta
 import razorpay
 import requests
+import hmac as hmaclib
+import asyncio
+import base64
+import hashlib
+import secrets
+import bcrypt
+from pymongo.errors import DuplicateKeyError
 
 
 ROOT_DIR = Path(__file__).parent
@@ -253,6 +260,258 @@ async def auth_logout(request: Request, response: Response):
     return {"ok": True}
 
 
+# ---------------- Admin authentication (enforced on the server) ----------------
+ADMIN_SETUP_CODE = os.environ.get('ADMIN_SETUP_CODE', '').strip()
+ADMIN_IDLE = timedelta(minutes=15)
+ADMIN_MAX = timedelta(hours=8)
+RECOVERY_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+
+
+class AdminSetupRequest(BaseModel):
+    password: str
+    setupCode: str
+
+
+class AdminLoginRequest(BaseModel):
+    password: str
+
+
+class AdminRecoverRequest(BaseModel):
+    recoveryCode: str
+    newPassword: str
+
+
+class AdminChangeRequest(BaseModel):
+    currentPassword: str
+    newPassword: str
+
+
+def _now():
+    return datetime.now(timezone.utc)
+
+
+def _parse_dt(v):
+    if not v:
+        return None
+    d = datetime.fromisoformat(v) if isinstance(v, str) else v
+    return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+
+
+def _strong(pw: str) -> bool:
+    return (
+        len(pw) >= 10
+        and any(c.islower() for c in pw)
+        and any(c.isupper() for c in pw)
+        and any(c.isdigit() for c in pw)
+        and any(not c.isalnum() for c in pw)
+    )
+
+
+def _norm_code(c: str) -> str:
+    return ''.join(ch for ch in (c or '').upper() if ch.isalnum())
+
+
+def _make_recovery_code() -> str:
+    raw = ''.join(secrets.choice(RECOVERY_ALPHABET) for _ in range(16))
+    return '-'.join(raw[i:i + 4] for i in range(0, 16, 4))
+
+
+def _prehash(secret: str) -> bytes:
+    # bcrypt only uses the first 72 bytes, so long passwords are digested first.
+    return base64.b64encode(hashlib.sha256(secret.encode()).digest())
+
+
+async def _hash_secret(secret: str) -> str:
+    hashed = await asyncio.to_thread(bcrypt.hashpw, _prehash(secret), bcrypt.gensalt(rounds=12))
+    return hashed.decode()
+
+
+async def _check_secret(secret: str, hashed: str) -> bool:
+    try:
+        return await asyncio.to_thread(bcrypt.checkpw, _prehash(secret), hashed.encode())
+    except ValueError:
+        return False
+
+
+def _token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def _fmt_wait(seconds: int) -> str:
+    return f"{seconds // 60}:{seconds % 60:02d}"
+
+
+def _lock_seconds(doc) -> int:
+    until = _parse_dt((doc or {}).get('locked_until'))
+    if not until:
+        return 0
+    return max(0, int((until - _now()).total_seconds() + 0.999))
+
+
+async def _register_fail(doc):
+    fails = int(doc.get('fails', 0)) + 1
+    update = {'fails': fails}
+    if fails % 5 == 0:
+        minutes = min(60, 5 * 2 ** (fails // 5 - 1))
+        update['locked_until'] = (_now() + timedelta(minutes=minutes)).isoformat()
+    await db.admin_auth.update_one({'_id': 'admin'}, {'$set': update})
+    return fails, 'locked_until' in update
+
+
+async def _new_admin_session() -> str:
+    token = secrets.token_urlsafe(32)
+    n = _now().isoformat()
+    await db.admin_sessions.insert_one({'token_hash': _token_hash(token), 'created_at': n, 'last_seen': n})
+    return token
+
+
+def _bearer(request: Request) -> Optional[str]:
+    auth = request.headers.get('Authorization', '')
+    return auth[7:] if auth.startswith('Bearer ') else None
+
+
+async def _admin_session(request: Request):
+    token = _bearer(request)
+    if not token:
+        return None
+    th = _token_hash(token)
+    sess = await db.admin_sessions.find_one({'token_hash': th}, {'_id': 0})
+    if not sess:
+        return None
+    n = _now()
+    if n - _parse_dt(sess['created_at']) > ADMIN_MAX or n - _parse_dt(sess['last_seen']) > ADMIN_IDLE:
+        await db.admin_sessions.delete_one({'token_hash': th})
+        return None
+    await db.admin_sessions.update_one({'token_hash': th}, {'$set': {'last_seen': n.isoformat()}})
+    return sess
+
+
+async def require_admin(request: Request):
+    sess = await _admin_session(request)
+    if not sess:
+        raise HTTPException(status_code=401, detail='Admin sign-in required.')
+    return sess
+
+
+async def _get_admin():
+    return await db.admin_auth.find_one({'_id': 'admin'})
+
+
+@api_router.get('/admin/status')
+async def admin_status():
+    doc = await _get_admin()
+    return {'configured': bool(doc), 'setupAvailable': bool(ADMIN_SETUP_CODE) and not doc, 'lockedSeconds': _lock_seconds(doc)}
+
+
+@api_router.post('/admin/setup')
+async def admin_setup(body: AdminSetupRequest):
+    if not ADMIN_SETUP_CODE:
+        raise HTTPException(status_code=503, detail='Admin setup is not enabled on this server. Please contact support.')
+    if not secrets.compare_digest(body.setupCode.strip().encode(), ADMIN_SETUP_CODE.encode()):
+        raise HTTPException(status_code=403, detail='That setup code is not correct.')
+    if await _get_admin():
+        raise HTTPException(status_code=409, detail='Admin access is already set up. Please sign in.')
+    if not _strong(body.password):
+        raise HTTPException(status_code=400, detail='Please choose a stronger password.')
+    code = _make_recovery_code()
+    created = _now().isoformat()
+    doc = {
+        '_id': 'admin',
+        'password_hash': await _hash_secret(body.password),
+        'recovery_hash': await _hash_secret(_norm_code(code)),
+        'created_at': created,
+        'fails': 0,
+        'locked_until': None,
+    }
+    try:
+        await db.admin_auth.insert_one(doc)
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail='Admin access is already set up. Please sign in.')
+    token = await _new_admin_session()
+    return {'token': token, 'recoveryCode': code, 'createdAt': created}
+
+
+@api_router.post('/admin/login')
+async def admin_login(body: AdminLoginRequest):
+    doc = await _get_admin()
+    if not doc:
+        raise HTTPException(status_code=409, detail='Admin access has not been set up yet.')
+    wait = _lock_seconds(doc)
+    if wait:
+        raise HTTPException(status_code=429, detail=f'Too many attempts. Try again in {_fmt_wait(wait)}.')
+    if not await _check_secret(body.password, doc['password_hash']):
+        fails, locked = await _register_fail(doc)
+        if locked:
+            wait = _lock_seconds(await _get_admin())
+            raise HTTPException(status_code=429, detail=f'Too many attempts. Locked for {_fmt_wait(wait)}.')
+        raise HTTPException(status_code=401, detail=f'Incorrect password. {5 - (fails % 5)} attempt(s) left before a temporary lock.')
+    await db.admin_auth.update_one({'_id': 'admin'}, {'$set': {'fails': 0, 'locked_until': None}})
+    token = await _new_admin_session()
+    return {'token': token, 'createdAt': doc.get('created_at')}
+
+
+@api_router.post('/admin/recover')
+async def admin_recover(body: AdminRecoverRequest):
+    doc = await _get_admin()
+    if not doc:
+        raise HTTPException(status_code=409, detail='Admin access has not been set up yet.')
+    wait = _lock_seconds(doc)
+    if wait:
+        raise HTTPException(status_code=429, detail=f'Too many attempts. Try again in {_fmt_wait(wait)}.')
+    if not _strong(body.newPassword):
+        raise HTTPException(status_code=400, detail='Please choose a stronger new password.')
+    if not await _check_secret(_norm_code(body.recoveryCode), doc['recovery_hash']):
+        _, locked = await _register_fail(doc)
+        if locked:
+            wait = _lock_seconds(await _get_admin())
+            raise HTTPException(status_code=429, detail=f'Too many attempts. Locked for {_fmt_wait(wait)}.')
+        raise HTTPException(status_code=401, detail='That recovery code is not correct.')
+    code = _make_recovery_code()
+    await db.admin_auth.update_one({'_id': 'admin'}, {'$set': {
+        'password_hash': await _hash_secret(body.newPassword),
+        'recovery_hash': await _hash_secret(_norm_code(code)),
+        'fails': 0,
+        'locked_until': None,
+        'updated_at': _now().isoformat(),
+    }})
+    await db.admin_sessions.delete_many({})
+    token = await _new_admin_session()
+    return {'token': token, 'recoveryCode': code, 'createdAt': doc.get('created_at')}
+
+
+@api_router.post('/admin/change-password')
+async def admin_change_password(body: AdminChangeRequest, request: Request):
+    sess = await require_admin(request)
+    doc = await _get_admin()
+    if not await _check_secret(body.currentPassword, doc['password_hash']):
+        raise HTTPException(status_code=400, detail='Your current password is not correct.')
+    if not _strong(body.newPassword):
+        raise HTTPException(status_code=400, detail='Please choose a stronger new password.')
+    code = _make_recovery_code()
+    await db.admin_auth.update_one({'_id': 'admin'}, {'$set': {
+        'password_hash': await _hash_secret(body.newPassword),
+        'recovery_hash': await _hash_secret(_norm_code(code)),
+        'updated_at': _now().isoformat(),
+    }})
+    await db.admin_sessions.delete_many({'token_hash': {'$ne': sess['token_hash']}})
+    return {'recoveryCode': code}
+
+
+@api_router.get('/admin/session')
+async def admin_session_check(request: Request):
+    await require_admin(request)
+    doc = await _get_admin()
+    return {'ok': True, 'createdAt': (doc or {}).get('created_at')}
+
+
+@api_router.post('/admin/logout')
+async def admin_logout(request: Request):
+    token = _bearer(request)
+    if token:
+        await db.admin_sessions.delete_one({'token_hash': _token_hash(token)})
+    return {'ok': True}
+
+
 # ---------------- Shared site content (so Admin edits appear on every device) ----------------
 @api_router.get("/content")
 async def get_content():
@@ -265,13 +524,46 @@ async def get_content():
 
 @api_router.put("/content")
 async def put_content(request: Request):
+    await require_admin(request)
     body = await request.json()
     if not isinstance(body, dict):
         raise HTTPException(status_code=400, detail="Invalid content payload.")
+    # Slot bookings are owned by the server (see /slots/{id}/book), so a stale admin tab can't un-book a slot.
+    existing = await db.site_content.find_one({"_id": "singleton"}, {"slots": 1})
+    server_booked = {s.get("id"): bool(s.get("booked")) for s in (existing or {}).get("slots") or [] if isinstance(s, dict)}
+    if isinstance(body.get("slots"), list):
+        body["slots"] = [
+            {**s, "booked": server_booked[s.get("id")]} if isinstance(s, dict) and s.get("id") in server_booked else s
+            for s in body["slots"]
+        ]
     body["_id"] = "singleton"
     body["updated_at"] = datetime.now(timezone.utc).isoformat()
     await db.site_content.replace_one({"_id": "singleton"}, body, upsert=True)
     return {"ok": True}
+
+
+async def _set_slot_booked(slot_id: str, booked: bool):
+    res = await db.site_content.update_one(
+        {"_id": "singleton", "slots": {"$elemMatch": {"id": slot_id, "booked": {"$ne": booked} if booked else True}}},
+        {"$set": {"slots.$.booked": booked}},
+    )
+    if res.modified_count:
+        return {"ok": True}
+    if not await db.site_content.find_one({"_id": "singleton", "slots.id": slot_id}, {"_id": 1}):
+        raise HTTPException(status_code=404, detail="That time slot no longer exists.")
+    if booked:
+        raise HTTPException(status_code=409, detail="Sorry, that slot has just been taken.")
+    return {"ok": True}
+
+
+@api_router.post("/slots/{slot_id}/book")
+async def book_slot(slot_id: str):
+    return await _set_slot_booked(slot_id, True)
+
+
+@api_router.post("/slots/{slot_id}/release")
+async def release_slot(slot_id: str):
+    return await _set_slot_booked(slot_id, False)
 
 
 # Include the router in the main app

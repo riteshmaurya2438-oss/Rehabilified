@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { addDays, format } from 'date-fns';
+import toast from 'react-hot-toast';
+import { adminToken, useAdminSession } from './adminAuth';
 
 /**
  * Data layer. Everything on the site is read from this store, and the Admin panel writes to it.
@@ -139,6 +141,11 @@ function seed() {
   };
 }
 
+const SLOT_API = `${process.env.REACT_APP_BACKEND_URL}/api/slots`;
+function syncSlot(slotId, booked) {
+  fetch(`${SLOT_API}/${encodeURIComponent(slotId)}/${booked ? 'book' : 'release'}`, { method: 'POST' }).catch(() => {});
+}
+
 const upsert = (arr, item) => (arr.some((x) => x.id === item.id) ? arr.map((x) => (x.id === item.id ? item : x)) : [...arr, item]);
 
 export const useDB = create()(
@@ -223,6 +230,7 @@ export const useDB = create()(
           bookings: [booking, ...s.bookings],
           slots: s.slots.map((x) => (x.id === slotId ? { ...x, booked: true } : x)),
         }));
+        syncSlot(slotId, true);
         return { ok: true, data: booking };
       },
 
@@ -235,6 +243,7 @@ export const useDB = create()(
           appointments: [appt, ...s.appointments],
           slots: s.slots.map((x) => (x.id === slotId ? { ...x, booked: true } : x)),
         }));
+        syncSlot(slotId, true);
         return { ok: true, data: appt };
       },
 
@@ -242,6 +251,7 @@ export const useDB = create()(
         set((s) => {
           const b = s.bookings.find((x) => x.id === id);
           if (!b) return {};
+          syncSlot(b.slotId, false);
           return {
             bookings: s.bookings.map((x) => (x.id === id ? { ...x, status: 'cancelled' } : x)),
             slots: s.slots.map((x) => (x.id === b.slotId ? { ...x, booked: false } : x)),
@@ -252,6 +262,7 @@ export const useDB = create()(
         set((s) => {
           const a = s.appointments.find((x) => x.id === id);
           if (!a) return {};
+          syncSlot(a.slotId, status !== 'cancelled');
           return {
             appointments: s.appointments.map((x) => (x.id === id ? { ...x, status } : x)),
             slots: s.slots.map((x) => (x.id === a.slotId ? { ...x, booked: status !== 'cancelled' } : x)),
@@ -267,7 +278,7 @@ export const useDB = create()(
 
       resetAll: () => set({ ...seed() }),
     }),
-    { name: 'rehabilified-db-v4' },
+    { name: 'rehabilified-db-v5' },
   ),
 );
 
@@ -279,12 +290,36 @@ let _syncTimer;
 function contentSnapshot(s) {
   return { lectures: s.lectures, courses: s.courses, testimonials: s.testimonials, faqs: s.faqs, stats: s.stats, settings: s.settings, slots: s.slots };
 }
+let _pendingPush = false;
 function pushContent() {
-  try {
-    fetch(CONTENT_API, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(contentSnapshot(useDB.getState())) }).catch(() => {});
-  } catch (e) {
-    /* ignore */
+  const token = adminToken();
+  if (!token) return;
+  fetch(CONTENT_API, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(contentSnapshot(useDB.getState())),
+  })
+    .then((res) => {
+      if (res.ok) {
+        _pendingPush = false;
+      } else if (res.status === 401) {
+        _pendingPush = true;
+        useAdminSession.getState().expire();
+        toast.error('Your admin session expired. Sign in again to save your latest change.');
+      } else {
+        toast.error('Could not save your change to the server. Please try again.');
+      }
+    })
+    .catch(() => toast.error('Could not reach the server. Your latest change was not saved.'));
+}
+
+/** After an admin signs in: save a change that failed because the session had expired, otherwise load the latest server content. */
+export function syncAfterLogin() {
+  if (_pendingPush) {
+    pushContent();
+    return Promise.resolve();
   }
+  return hydrateContent();
 }
 let _prevContent = JSON.stringify(contentSnapshot(useDB.getState()));
 useDB.subscribe((s) => {

@@ -567,7 +567,7 @@ export function BrandTab() {
 /* ---------------- Security ---------------- */
 export function SecurityTab({ onLock }) {
   const change = useAuth((s) => s.change);
-  const cred = useAuth((s) => s.cred);
+  const createdAt = useAuth((s) => s.createdAt);
   const entries = useAudit((s) => s.entries);
   const clear = useAudit((s) => s.clear);
   const [cur, setCur] = useState('');
@@ -592,11 +592,12 @@ export function SecurityTab({ onLock }) {
   }
 
   const safeguards = [
-    'No default password: you created it yourself and it is never stored, only a salted PBKDF2 hash.',
+    'No default password: you created it yourself. Only a salted bcrypt hash is stored, on the server.',
     '5 wrong attempts triggers a lockout that doubles each time (5 \u2192 10 \u2192 20 \u2192 60 min).',
     `Auto-lock after ${IDLE_MS / 60000} minutes of inactivity and a hard 8-hour session limit.`,
-    'Session lives in this tab only and ends when you close it.',
-    'Every sign-in, failed attempt and change is written to the activity log below.',
+    'Sign-in is checked by the server, so admin access cannot be created or unlocked from another browser.',
+    'Session lives in this tab only and ends when you close it or sign out.',
+    'Every sign-in, failed attempt and change made in this browser is written to the activity log below.',
     'Recovery code (shown once) is the only way to reset a forgotten password.',
     'The admin page is hidden from search engines (noindex).',
   ];
@@ -616,7 +617,7 @@ export function SecurityTab({ onLock }) {
                 </li>
               ))}
             </ul>
-            <p className="mt-4 text-xs text-navy/50">Admin created {cred ? when(cred.createdAt) : '\u2014'} &middot; {cred?.algo === 'pbkdf2' ? 'PBKDF2-SHA256 (310,000 rounds)' : 'iterated SHA-256 fallback'}</p>
+            <p className="mt-4 text-xs text-navy/50">Admin created {createdAt ? when(createdAt) : '\u2014'} &middot; bcrypt (cost 12), stored on the server</p>
             <button className="btn btn-outline mt-5" onClick={onLock}>
               Lock admin now
             </button>
@@ -653,9 +654,9 @@ export function SecurityTab({ onLock }) {
       </div>
 
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm leading-relaxed text-amber-900">
-        <p className="font-bold">An honest note on the limits</p>
+        <p className="font-bold">How your admin access works</p>
         <p className="mt-1">
-          This panel locks the admin screen in <strong>this browser</strong>, and your <strong>content now syncs to the server</strong> so edits show on every device. For a fully hardened setup (server-enforced admin login, per-row database security) you can extend the backend further. Payments are already verified server-side.
+          Your admin password is checked by the <strong>server</strong>, and only a signed-in admin can change website content. Your edits are saved to the server, so they show on every device. Payments are verified server-side. Registrations, enrolments and bookings are still kept in the browser where they were made.
         </p>
       </div>
 

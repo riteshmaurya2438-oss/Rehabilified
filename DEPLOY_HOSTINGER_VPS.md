@@ -68,6 +68,7 @@ DB_NAME="rehabilified"
 CORS_ORIGINS="*"
 RAZORPAY_KEY_ID="rzp_live_TkfxOSWTuRmeF6"
 RAZORPAY_KEY_SECRET="xnMjEKTyYhZr0EUbhkUN92oa"
+ADMIN_SETUP_CODE="<one-time code from support, needed to create the admin password>"
 ```
 
 Run it as a service so it stays alive. Create `/etc/systemd/system/rehab-backend.service`:
@@ -175,6 +176,7 @@ cd ../frontend && yarn install && yarn build && cp -r build/* /var/www/rehabilif
 ```
 
 ## Security notes
+- `ADMIN_SETUP_CODE` must be set in the backend `.env` for the first admin setup. Once the admin password exists the code is no longer accepted, and only that password (or the recovery code) opens the admin panel.
 - Keep `RAZORPAY_KEY_SECRET` only in `/opt/rehabilified/backend/.env` (never in the frontend).
 - Set a firewall: `ufw allow OpenSSH && ufw allow 'Nginx Full' && ufw enable`
 - MongoDB listens only on localhost by default (good). Don't expose port 27017 publicly.

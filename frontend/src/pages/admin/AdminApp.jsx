@@ -6,6 +6,7 @@ import { BarChart3, BookOpen, CalendarClock, Check, Copy, CreditCard, ImageIcon,
 import { audit, fmtWait, useAdminSession, useAuth } from '../../lib/adminAuth';
 import { strength } from '../../lib/security';
 import { useSEO } from '../../lib/seo';
+import { syncAfterLogin } from '../../lib/store';
 import { BrandMark, EASE, Logo } from '../../components/ui';
 import { PasswordInput, StrengthMeter } from './parts';
 import { AppointmentsTab, BrandTab, ContentTab, Courses, HomepageTab, Lectures, Overview, PaymentsTab, Registrations, SecurityTab, SlotsTab } from './tabs';
@@ -23,12 +24,16 @@ function useNoIndex() {
 
 /* ====================== Gate: setup / sign in / recover ====================== */
 function Gate() {
-  const cred = useAuth((s) => s.cred);
+  const configured = useAuth((s) => s.configured);
+  const setupAvailable = useAuth((s) => s.setupAvailable);
   const lockedUntil = useAuth((s) => s.lockedUntil);
-  const { setup, verify, recover } = useAuth.getState();
+  const { setup, verify, recover, refresh } = useAuth.getState();
   const start = useAdminSession((s) => s.start);
 
-  const [mode, setMode] = useState(cred ? 'login' : 'setup');
+  const [mode, setMode] = useState('loading');
+  const [loadError, setLoadError] = useState('');
+  const [setupCode, setSetupCode] = useState('');
+  const [pendingToken, setPendingToken] = useState('');
   const [pw, setPw] = useState('');
   const [pw2, setPw2] = useState('');
   const [rc, setRc] = useState('');
@@ -42,6 +47,28 @@ function Gate() {
     const i = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(i);
   }, []);
+  useEffect(() => {
+    let alive = true;
+    refresh().then((r) => {
+      if (!alive) return;
+      if (!r.ok) return setLoadError(r.error);
+      setMode(r.configured ? 'login' : 'setup');
+    });
+    return () => {
+      alive = false;
+    };
+  }, [refresh]);
+
+  useEffect(() => {
+    if (configured && mode === 'setup') setMode('login');
+  }, [configured, mode]);
+
+  function enter(token, note) {
+    start(token);
+    syncAfterLogin();
+    audit('Signed in', note);
+  }
+
   const wait = Math.max(0, lockedUntil - now);
   const st = strength(pw);
 
@@ -52,8 +79,7 @@ function Gate() {
     const r = await verify(pw);
     setBusy(false);
     if (r.ok) {
-      audit('Signed in');
-      start();
+      enter(r.token);
       toast.success('Welcome back.');
     } else {
       toast.error(r.error);
@@ -66,9 +92,11 @@ function Gate() {
     if (!st.ok) return void toast.error('Please choose a stronger password.');
     if (pw !== pw2) return void toast.error('The passwords do not match.');
     setBusy(true);
-    const r = await setup(pw);
+    const r = await setup(pw, setupCode);
     setBusy(false);
     if (!r.ok) return void toast.error(r.error);
+    setPendingToken(r.token);
+    setSetupCode('');
     setNewCode(r.code ?? '');
     setPw('');
     setPw2('');
@@ -83,6 +111,7 @@ function Gate() {
     const r = await recover(rc, pw);
     setBusy(false);
     if (!r.ok) return void toast.error(r.error);
+    setPendingToken(r.token);
     setNewCode(r.code ?? '');
     setPw('');
     setPw2('');
@@ -90,7 +119,7 @@ function Gate() {
     setMode('code');
   }
 
-  const heading = { login: 'Admin sign in', setup: 'Create your admin password', recover: 'Reset your password', code: 'Save your recovery code' }[mode];
+  const heading = { loading: 'Admin', login: 'Admin sign in', setup: 'Create your admin password', recover: 'Reset your password', code: 'Save your recovery code' }[mode];
 
   return (
     <main className="grid min-h-screen bg-mist lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
@@ -129,6 +158,10 @@ function Gate() {
           </span>
           <h1 className="mt-5 text-3xl font-extrabold">{heading}</h1>
 
+          {mode === 'loading' && (
+            <p className="mt-6 text-sm text-navy/60">{loadError ? `${loadError}` : 'Checking admin access\u2026'}</p>
+          )}
+
           {mode === 'login' && (
             <form onSubmit={onLogin} className="mt-6 space-y-4">
               <div>
@@ -151,17 +184,24 @@ function Gate() {
 
           {mode === 'setup' && (
             <form onSubmit={onSetup} className="mt-6 space-y-4">
-              <p className="text-sm text-navy/60">First-time setup. Choose a strong password that only you know. There is no default password.</p>
+              <p className="text-sm text-navy/60">First-time setup. Enter the setup code you received from support, then choose a strong password that only you know. There is no default password.</p>
+              {!setupAvailable && (
+                <p className="rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-800">Admin setup is not enabled on this server yet. Please contact support for your setup code.</p>
+              )}
+              <div>
+                <label className="label" htmlFor="ad-setup">Setup code</label>
+                <input id="ad-setup" className="field font-mono tracking-wider" value={setupCode} onChange={(e) => setSetupCode(e.target.value)} placeholder="RB-XXXXXXXXXXXX" autoFocus spellCheck={false} autoComplete="off" />
+              </div>
               <div>
                 <label className="label" htmlFor="ad-new">New password</label>
-                <PasswordInput id="ad-new" value={pw} onChange={setPw} autoFocus autoComplete="new-password" />
+                <PasswordInput id="ad-new" value={pw} onChange={setPw} autoComplete="new-password" />
                 <StrengthMeter password={pw} />
               </div>
               <div>
                 <label className="label" htmlFor="ad-new2">Confirm password</label>
                 <PasswordInput id="ad-new2" value={pw2} onChange={setPw2} autoComplete="new-password" />
               </div>
-              <button className="btn btn-primary w-full py-3.5" disabled={busy || !st.ok || pw !== pw2}>
+              <button className="btn btn-primary w-full py-3.5" disabled={busy || !setupAvailable || !setupCode.trim() || !st.ok || pw !== pw2}>
                 {busy ? 'Securing\u2026' : 'Create admin access'}
               </button>
             </form>
@@ -218,8 +258,7 @@ function Gate() {
                 className="btn btn-primary w-full py-3.5"
                 disabled={!saved}
                 onClick={() => {
-                  audit('Signed in', 'After setup / reset');
-                  start();
+                  enter(pendingToken, 'After setup / reset');
                   toast.success('Admin access is ready.');
                 }}
               >
@@ -256,7 +295,12 @@ function Shell() {
   const end = useAdminSession((s) => s.end);
   const touch = useAdminSession((s) => s.touch);
   const check = useAdminSession((s) => s.check);
+  const validate = useAdminSession((s) => s.validate);
   const [tab, setTab] = useState('overview');
+
+  useEffect(() => {
+    validate();
+  }, [validate]);
 
   useEffect(() => {
     let last = 0;
@@ -275,17 +319,11 @@ function Shell() {
         toast('Locked after inactivity. Please sign in again.', { icon: '\ud83d\udd12' });
       }
     }, 10000);
-    // Lock immediately when the admin leaves: tab close, refresh or navigating away.
-    const onExit = () => end();
-    window.addEventListener('beforeunload', onExit);
-    window.addEventListener('pagehide', onExit);
     return () => {
       evs.forEach((e) => window.removeEventListener(e, bump));
       window.clearInterval(iv);
-      window.removeEventListener('beforeunload', onExit);
-      window.removeEventListener('pagehide', onExit);
     };
-  }, [touch, check, end]);
+  }, [touch, check]);
 
   function lock() {
     audit('Signed out');
@@ -357,7 +395,7 @@ function Shell() {
         <main className="mx-auto max-w-6xl px-5 py-8 sm:px-8 lg:py-10">
           <div className="mb-6 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-white px-4 py-3 text-xs text-navy/55 shadow-sm">
             <span className="flex items-center gap-2 font-semibold text-emerald-700"><ShieldCheck className="h-4 w-4" /> Secure session active &middot; auto-locks after 15 min idle</span>
-            <span>Demo data store: this browser</span>
+            <span>Changes save to the server and show on every device</span>
           </div>
           <AnimatePresence mode="wait">
             <motion.div key={tab} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.28, ease: EASE }}>

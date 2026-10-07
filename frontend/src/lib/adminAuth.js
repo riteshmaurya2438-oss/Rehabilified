@@ -1,8 +1,17 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { bestAlgo, deriveHash, ITER, makeRecoveryCode, normalizeCode, randomHex, safeEqual, strength } from './security';
+import { randomHex } from './security';
 
-/* ---------------- Audit log ---------------- */
+const API = `${process.env.REACT_APP_BACKEND_URL}/api/admin`;
+
+// Older builds kept the admin password hash in this browser; it is no longer used.
+try {
+  localStorage.removeItem('rb-admin-cred');
+} catch {
+  /* ignore */
+}
+
+/* ---------------- Audit log (this browser) ---------------- */
 export const useAudit = create()(
   persist(
     (set) => ({
@@ -15,108 +24,16 @@ export const useAudit = create()(
 );
 export const audit = (action, detail) => useAudit.getState().add(action, detail);
 
-/* ---------------- Credentials, lockout ---------------- */
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export const fmtWait = (ms) => {
   const s = Math.ceil(ms / 1000);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
 
-async function makeCred(password) {
-  const algo = bestAlgo();
-  const iter = ITER[algo];
-  const salt = randomHex(16);
-  const rSalt = randomHex(16);
-  const code = makeRecoveryCode();
-  const [hash, rHash] = await Promise.all([deriveHash(password, salt, algo, iter), deriveHash(normalizeCode(code), rSalt, algo, iter)]);
-  return { cred: { algo, iter, salt, hash, rSalt, rHash, createdAt: new Date().toISOString() }, code };
-}
-
-export const useAuth = create()(
-  persist(
-    (set, get) => {
-      const registerFail = () => {
-        const fails = get().fails + 1;
-        let lockedUntil = 0;
-        if (fails % 5 === 0) lockedUntil = Date.now() + Math.min(60, 5 * 2 ** (fails / 5 - 1)) * 60000;
-        set({ fails, lockedUntil });
-        return { fails, lockedUntil };
-      };
-      return {
-        cred: null,
-        fails: 0,
-        lockedUntil: 0,
-
-        setup: async (password) => {
-          if (get().cred) return { ok: false, error: 'Admin access is already set up.' };
-          if (!strength(password).ok) return { ok: false, error: 'Please choose a stronger password.' };
-          const { cred, code } = await makeCred(password);
-          set({ cred, fails: 0, lockedUntil: 0 });
-          audit('Admin access created');
-          return { ok: true, code };
-        },
-
-        verify: async (password) => {
-          const s = get();
-          if (!s.cred) return { ok: false, error: 'Admin access has not been set up yet.' };
-          const wait = s.lockedUntil - Date.now();
-          if (wait > 0) return { ok: false, error: `Too many attempts. Try again in ${fmtWait(wait)}.` };
-          const [hash] = await Promise.all([deriveHash(password, s.cred.salt, s.cred.algo, s.cred.iter), sleep(500)]);
-          if (safeEqual(hash, s.cred.hash)) {
-            set({ fails: 0, lockedUntil: 0 });
-            return { ok: true };
-          }
-          const f = registerFail();
-          audit('Failed sign-in attempt', `Attempt ${f.fails}`);
-          if (f.lockedUntil) {
-            audit('Sign-in locked', `Locked until ${new Date(f.lockedUntil).toLocaleTimeString()}`);
-            return { ok: false, error: `Too many attempts. Locked for ${fmtWait(f.lockedUntil - Date.now())}.` };
-          }
-          return { ok: false, error: `Incorrect password. ${5 - (f.fails % 5)} attempt(s) left before a temporary lock.` };
-        },
-
-        recover: async (code, newPassword) => {
-          const s = get();
-          if (!s.cred) return { ok: false, error: 'Admin access has not been set up yet.' };
-          const wait = s.lockedUntil - Date.now();
-          if (wait > 0) return { ok: false, error: `Too many attempts. Try again in ${fmtWait(wait)}.` };
-          if (!strength(newPassword).ok) return { ok: false, error: 'Please choose a stronger new password.' };
-          const [rh] = await Promise.all([deriveHash(normalizeCode(code), s.cred.rSalt, s.cred.algo, s.cred.iter), sleep(500)]);
-          if (!safeEqual(rh, s.cred.rHash)) {
-            const f = registerFail();
-            audit('Failed recovery attempt');
-            return { ok: false, error: f.lockedUntil ? `Too many attempts. Locked for ${fmtWait(f.lockedUntil - Date.now())}.` : 'That recovery code is not correct.' };
-          }
-          const { cred, code: fresh } = await makeCred(newPassword);
-          set({ cred, fails: 0, lockedUntil: 0 });
-          audit('Password reset with recovery code');
-          return { ok: true, code: fresh };
-        },
-
-        change: async (current, next) => {
-          const s = get();
-          if (!s.cred) return { ok: false, error: 'Admin access has not been set up yet.' };
-          const hash = await deriveHash(current, s.cred.salt, s.cred.algo, s.cred.iter);
-          if (!safeEqual(hash, s.cred.hash)) {
-            audit('Failed password change', 'Wrong current password');
-            return { ok: false, error: 'Your current password is not correct.' };
-          }
-          if (!strength(next).ok) return { ok: false, error: 'Please choose a stronger new password.' };
-          const { cred, code } = await makeCred(next);
-          set({ cred });
-          audit('Password changed');
-          return { ok: true, code };
-        },
-      };
-    },
-    { name: 'rb-admin-cred' },
-  ),
-);
-
-/* ---------------- Session (tab-scoped, auto-expiring) ---------------- */
+/* ---------------- Session (tab-scoped, auto-expiring, validated by the server) ---------------- */
 const KEY = 'rb-admin-session';
 export const IDLE_MS = 15 * 60 * 1000;
 const MAX_MS = 8 * 60 * 60 * 1000;
+const PING_MS = 60 * 1000;
 
 function read() {
   try {
@@ -124,7 +41,7 @@ function read() {
     if (!raw) return null;
     const v = JSON.parse(raw);
     const n = Date.now();
-    if (n - v.start > MAX_MS || n - v.last > IDLE_MS) {
+    if (!v.token || n - v.start > MAX_MS || n - v.last > IDLE_MS) {
       sessionStorage.removeItem(KEY);
       return null;
     }
@@ -134,38 +51,144 @@ function read() {
   }
 }
 
+function write(v) {
+  try {
+    sessionStorage.setItem(KEY, JSON.stringify(v));
+  } catch {
+    /* ignore */
+  }
+}
+
+function clearStored() {
+  try {
+    sessionStorage.removeItem(KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+export const adminToken = () => read()?.token ?? null;
+
+async function call(path, { method = 'POST', body, auth = false } = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (auth) {
+    const t = adminToken();
+    if (t) headers.Authorization = `Bearer ${t}`;
+  }
+  try {
+    const res = await fetch(`${API}${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, status: res.status, error: typeof data.detail === 'string' ? data.detail : 'Something went wrong. Please try again.' };
+    return { ok: true, ...data };
+  } catch {
+    return { ok: false, status: 0, error: 'Could not reach the server. Please check your connection and try again.' };
+  }
+}
+
 export const useAdminSession = create()((set, get) => ({
   active: !!read(),
-  start: () => {
-    try {
-      sessionStorage.setItem(KEY, JSON.stringify({ id: randomHex(16), start: Date.now(), last: Date.now() }));
-    } catch {
-      /* ignore */
-    }
+  start: (token) => {
+    const n = Date.now();
+    write({ token, start: n, last: n, ping: n });
     set({ active: true });
   },
   touch: () => {
     const s = read();
-    if (s) {
-      s.last = Date.now();
-      try {
-        sessionStorage.setItem(KEY, JSON.stringify(s));
-      } catch {
-        /* ignore */
-      }
+    if (!s) return;
+    const n = Date.now();
+    s.last = n;
+    if (n - (s.ping || 0) > PING_MS) {
+      s.ping = n;
+      call('/session', { method: 'GET', auth: true }).then((r) => {
+        if (!r.ok && r.status === 401) get().expire();
+      });
     }
+    write(s);
   },
   end: () => {
-    try {
-      sessionStorage.removeItem(KEY);
-    } catch {
-      /* ignore */
-    }
+    if (adminToken()) call('/logout', { auth: true });
+    clearStored();
+    set({ active: false });
+  },
+  expire: () => {
+    clearStored();
     set({ active: false });
   },
   check: () => {
     const ok = !!read();
     if (!ok && get().active) set({ active: false });
     return ok;
+  },
+  validate: async () => {
+    if (!read()) {
+      if (get().active) set({ active: false });
+      return false;
+    }
+    const r = await call('/session', { method: 'GET', auth: true });
+    if (!r.ok && r.status === 401) {
+      get().expire();
+      return false;
+    }
+    if (r.ok) useAuth.setState({ createdAt: r.createdAt });
+    return true;
+  },
+}));
+
+/* ---------------- Credentials (stored and checked on the server) ---------------- */
+export const useAuth = create()((set, get) => ({
+  configured: null,
+  setupAvailable: false,
+  createdAt: null,
+  lockedUntil: 0,
+
+  refresh: async () => {
+    const r = await call('/status', { method: 'GET' });
+    if (r.ok) set({ configured: r.configured, setupAvailable: r.setupAvailable, lockedUntil: r.lockedSeconds ? Date.now() + r.lockedSeconds * 1000 : 0 });
+    return r;
+  },
+
+  setup: async (password, setupCode) => {
+    const r = await call('/setup', { body: { password, setupCode } });
+    if (!r.ok) {
+      if (r.status === 409) await get().refresh();
+      return r;
+    }
+    set({ configured: true, setupAvailable: false, createdAt: r.createdAt });
+    audit('Admin access created');
+    return { ok: true, code: r.recoveryCode, token: r.token };
+  },
+
+  verify: async (password) => {
+    const r = await call('/login', { body: { password } });
+    if (!r.ok) {
+      if (r.status === 401 || r.status === 429) audit('Failed sign-in attempt');
+      await get().refresh();
+      return r;
+    }
+    set({ lockedUntil: 0, createdAt: r.createdAt });
+    return { ok: true, token: r.token };
+  },
+
+  recover: async (code, newPassword) => {
+    const r = await call('/recover', { body: { recoveryCode: code, newPassword } });
+    if (!r.ok) {
+      if (r.status === 401 || r.status === 429) audit('Failed recovery attempt');
+      await get().refresh();
+      return r;
+    }
+    set({ lockedUntil: 0, createdAt: r.createdAt });
+    audit('Password reset with recovery code');
+    return { ok: true, code: r.recoveryCode, token: r.token };
+  },
+
+  change: async (currentPassword, newPassword) => {
+    const r = await call('/change-password', { auth: true, body: { currentPassword, newPassword } });
+    if (!r.ok) {
+      if (r.status === 401) useAdminSession.getState().expire();
+      else if (r.status === 400) audit('Failed password change', r.error);
+      return r;
+    }
+    audit('Password changed');
+    return { ok: true, code: r.recoveryCode };
   },
 }));
