@@ -31,7 +31,7 @@ export function Splash() {
       {show && (
         <motion.div key="splash" className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-royal text-white" exit={{ y: '-100%' }} transition={{ duration: 0.75, ease: EASE }}>
           <motion.div initial={{ scale: 0.6, opacity: 0, rotate: -6 }} animate={{ scale: 1, opacity: 1, rotate: 0 }} transition={{ duration: 0.9, ease: EASE }} className="h-44 w-44 sm:h-56 sm:w-56">
-            <BrandMark className="h-full w-full" />
+            <img src="images/logo.png" alt="Rehabilified" className="h-full w-full rounded-2xl object-cover" />
           </motion.div>
           <motion.p initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5, duration: 0.7 }} className="mt-4 font-display text-3xl font-extrabold tracking-tight">
             Rehabilified<sup className="text-sm">&trade;</sup>
