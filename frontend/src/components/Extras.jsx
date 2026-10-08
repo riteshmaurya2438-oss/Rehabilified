@@ -29,16 +29,10 @@ export function Splash() {
   return (
     <AnimatePresence>
       {show && (
-        <motion.div key="splash" className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-royal text-white" exit={{ y: '-100%' }} transition={{ duration: 0.75, ease: EASE }}>
-          <motion.div initial={{ scale: 0.6, opacity: 0, rotate: -6 }} animate={{ scale: 1, opacity: 1, rotate: 0 }} transition={{ duration: 0.9, ease: EASE }} className="h-44 w-44 sm:h-56 sm:w-56">
-            <img src="images/logo.png" alt="Rehabilified" className="h-full w-full rounded-2xl object-cover" />
+        <motion.div key="splash" className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#0b6edc] text-white" exit={{ y: '-100%' }} transition={{ duration: 0.75, ease: EASE }}>
+          <motion.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: 0.9, ease: EASE }} className="w-64 sm:w-80">
+            <img src="images/logo-splash.png" alt="Rehabilified" className="h-auto w-full" />
           </motion.div>
-          <motion.p initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5, duration: 0.7 }} className="mt-4 font-display text-3xl font-extrabold tracking-tight">
-            Rehabilified<sup className="text-sm">&trade;</sup>
-          </motion.p>
-          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }} className="mt-1 text-sm text-white/75">
-            Educating physios from clinical point of view
-          </motion.p>
           <div className="mt-8 h-1 w-48 overflow-hidden rounded-full bg-white/25">
             <motion.div initial={{ width: 0 }} animate={{ width: '100%' }} transition={{ duration: 1.5, ease: 'easeInOut' }} className="h-full rounded-full bg-white" />
           </div>
