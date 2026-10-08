@@ -234,7 +234,7 @@ export function Logo({ size = 44 }) {
       {img.failed ? (
         <BrandMark className="h-full w-full p-1.5" />
       ) : (
-        <img src={img.src} onError={img.onError} alt="Rehabilified logo" className="h-full w-full scale-[1.85] object-cover" style={{ objectPosition: '50% 42%' }} />
+        <img src={img.src} onError={img.onError} alt="Rehabilified logo" className="h-full w-full object-cover" />
       )}
     </span>
   );
@@ -242,7 +242,7 @@ export function Logo({ size = 44 }) {
 
 export function FullLogo({ className }) {
   const logoData = useDB((s) => s.settings.logoData);
-  const img = useImgChain([logoData, 'images/logo.png', 'images/logo.jpg', 'images/logo.jpeg']);
+  const img = useImgChain([logoData, 'images/logo-full.png', 'images/logo.png', 'images/logo.jpg']);
   return img.failed ? (
     <BrandLogoFull className={cn('rounded-2xl', className)} />
   ) : (
