@@ -10,6 +10,7 @@ import { Hero } from './components/Hero';
 import { About, CredibilityStrip, Contact, FAQ, Testimonials } from './components/Info';
 import { AppointmentSection, ConsultationSection, CoursesSection, LecturesSection } from './components/Offerings';
 import { HowItWorks, Splash, TopicsMarquee } from './components/Extras';
+import { GallerySection } from './components/Gallery';
 import { AuthModal, CheckoutModal, PayModal } from './components/Modals';
 import { Admin } from './pages/admin/AdminApp';
 import { Dashboard } from './pages/Dashboard';
@@ -34,6 +35,7 @@ function Home() {
       <ConsultationSection />
       <AppointmentSection />
       <Testimonials />
+      <GallerySection />
       <FAQ />
       <Contact />
     </main>
