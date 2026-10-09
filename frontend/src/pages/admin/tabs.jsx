@@ -424,6 +424,9 @@ export function HomepageTab() {
   const setSettings = useDB((s) => s.setSettings);
   const [st, setSt] = useState(stats);
   const [price, setPrice] = useState(settings.consultationPrice);
+  const [price30, setPrice30] = useState(settings.consultation30Price || 799);
+  const [price60, setPrice60] = useState(settings.consultation60Price || 999);
+  const [formUrl, setFormUrl] = useState(settings.consultationFormUrl || '');
   const [wa, setWa] = useState(settings.whatsapp);
   const [ig, setIg] = useState(settings.instagram);
   return (
@@ -453,24 +456,43 @@ export function HomepageTab() {
       </div>
       <div>
         <h2 className="text-xl font-extrabold">Site settings</h2>
-        <div className="mt-5 grid gap-4 sm:grid-cols-3">
+        <div className="mt-5 space-y-5">
           <div>
-            <label className="label">1:1 consultation price (\u20b9)</label>
-            <input type="number" className="field" value={price} onChange={(e) => setPrice(Number(e.target.value))} />
+            <h3 className="text-sm font-bold uppercase tracking-wide text-navy/50">1:1 Consultation pricing &amp; link</h3>
+            <div className="mt-3 grid gap-4 sm:grid-cols-3">
+              <div>
+                <label className="label">30-min price (\u20b9)</label>
+                <input type="number" className="field" value={price30} onChange={(e) => setPrice30(Number(e.target.value))} />
+              </div>
+              <div>
+                <label className="label">60-min price (\u20b9)</label>
+                <input type="number" className="field" value={price60} onChange={(e) => setPrice60(Number(e.target.value))} />
+              </div>
+              <div>
+                <label className="label">Registration form URL</label>
+                <input className="field" value={formUrl} onChange={(e) => setFormUrl(e.target.value)} placeholder="https://forms.gle/..." />
+                <p className="mt-1 text-xs text-navy/40">Shown after successful payment</p>
+              </div>
+            </div>
           </div>
           <div>
-            <label className="label">WhatsApp number (with country code)</label>
-            <input className="field" value={wa} onChange={(e) => setWa(e.target.value.replace(/\D/g, ''))} />
-          </div>
-          <div>
-            <label className="label">Instagram handle</label>
-            <input className="field" value={ig} onChange={(e) => setIg(e.target.value.replace(/^@/, ''))} />
+            <h3 className="text-sm font-bold uppercase tracking-wide text-navy/50">Contact &amp; Social</h3>
+            <div className="mt-3 grid gap-4 sm:grid-cols-3">
+              <div>
+                <label className="label">WhatsApp number (with country code)</label>
+                <input className="field" value={wa} onChange={(e) => setWa(e.target.value.replace(/\D/g, ''))} />
+              </div>
+              <div>
+                <label className="label">Instagram handle</label>
+                <input className="field" value={ig} onChange={(e) => setIg(e.target.value.replace(/^@/, ''))} />
+              </div>
+            </div>
           </div>
         </div>
         <button
           className="btn btn-primary mt-4"
           onClick={() => {
-            setSettings({ ...useDB.getState().settings, consultationPrice: price, whatsapp: wa, instagram: ig });
+            setSettings({ ...useDB.getState().settings, consultationPrice: price, consultation30Price: price30, consultation60Price: price60, consultationFormUrl: formUrl, whatsapp: wa, instagram: ig });
             audit('Site settings updated');
             toast.success('Settings saved.');
           }}

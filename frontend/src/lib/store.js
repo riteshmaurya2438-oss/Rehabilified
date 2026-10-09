@@ -136,7 +136,7 @@ function seed() {
       { id: 's3', label: 'Workshops & talks delivered', value: 40, suffix: '+' },
       { id: 's4', label: 'Average learner rating', value: 4.9, suffix: '/5' },
     ],
-    settings: { consultationPrice: 999, whatsapp: '917303995608', instagram: 'rehabilified', instagramUrl: 'https://www.instagram.com/rehabilified?stkn=MXM5M2xuNzJuYXMzbg==', email: '' },
+    settings: { consultationPrice: 999, consultation30Price: 799, consultation60Price: 999, consultationFormUrl: 'https://forms.gle/SdUuf9npWgMxzNpj8', whatsapp: '917303995608', instagram: 'rehabilified', instagramUrl: 'https://www.instagram.com/rehabilified?stkn=MXM5M2xuNzJuYXMzbg==', email: '' },
     progress: {},
   };
 }

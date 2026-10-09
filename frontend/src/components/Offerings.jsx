@@ -179,12 +179,19 @@ function SlotPicker({ kind, selected, onSelect }) {
 }
 
 /* ---------------- 6. Career Clarity Consultation (paid, gated) ---------------- */
-const REG_FORM_URL = 'https://forms.gle/SdUuf9npWgMxzNpj8';
 
-const CONSULT_OPTIONS = [
-  { id: 'cc-30', short: '30-Minute Consultation', label: '30-Minute Career Clarity Consultation', duration: '30 minutes', price: 799, blurb: 'A focused session to get clear, honest answers on your most pressing career question.' },
-  { id: 'cc-60', short: '60-Minute Consultation', label: '60-Minute Career Clarity Consultation', duration: '60 minutes', price: 999, blurb: 'A deeper session to map your options, specialisation and a step-by-step plan.', popular: true },
-];
+function useConsultOptions() {
+  const settings = useDB((s) => s.settings);
+  return useMemo(() => [
+    { id: 'cc-30', short: '30-Minute Consultation', label: '30-Minute Career Clarity Consultation', duration: '30 minutes', price: settings.consultation30Price || 799, blurb: 'A focused session to get clear, honest answers on your most pressing career question.' },
+    { id: 'cc-60', short: '60-Minute Consultation', label: '60-Minute Career Clarity Consultation', duration: '60 minutes', price: settings.consultation60Price || 999, blurb: 'A deeper session to map your options, specialisation and a step-by-step plan.', popular: true },
+  ], [settings.consultation30Price, settings.consultation60Price]);
+}
+
+function useFormUrl() {
+  const url = useDB((s) => s.settings.consultationFormUrl);
+  return url || 'https://forms.gle/SdUuf9npWgMxzNpj8';
+}
 
 const CONSULT_TOPICS = [
   'Career options after BPT',
@@ -202,6 +209,8 @@ const ccPhoneOk = (p) => p.replace(/\D/g, '').length >= 10;
 
 export function ConsultationSection() {
   const addPayment = useDB((s) => s.addPayment);
+  const consultOptions = useConsultOptions();
+  const regFormUrl = useFormUrl();
   const [chosen, setChosen] = useState(null);
   const [step, setStep] = useState('form'); // form | success | failed
   const [name, setName] = useState('');
@@ -244,7 +253,7 @@ export function ConsultationSection() {
   }
 
   function copyLink() {
-    navigator.clipboard?.writeText(REG_FORM_URL).then(() => {
+    navigator.clipboard?.writeText(regFormUrl).then(() => {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     });
@@ -267,7 +276,7 @@ export function ConsultationSection() {
         </Reveal>
 
         <div className="mx-auto mt-14 grid max-w-4xl gap-6 md:grid-cols-2">
-          {CONSULT_OPTIONS.map((o, i) => (
+          {consultOptions.map((o, i) => (
             <Reveal key={o.id} delay={i * 0.1} className="h-full">
               <article className={cn('card flex h-full flex-col', o.popular && 'ring-2 ring-royal')}>
                 {o.popular && <span className="absolute right-5 top-5 rounded-full bg-royal px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-white">Most popular</span>}
@@ -338,9 +347,9 @@ export function ConsultationSection() {
               <p className="font-semibold text-navy">Next step: complete the registration form</p>
               <p className="mt-1">Please complete the registration form so Dr. Fatima can receive your details and prepare for your consultation. Your payment is confirmed; the consultation time is arranged after you submit this form.</p>
             </div>
-            <a href={REG_FORM_URL} target="_blank" rel="noopener noreferrer" className="btn btn-primary mt-5 w-full py-3.5">Complete Registration <ExternalLink className="h-4 w-4" /></a>
+            <a href={regFormUrl} target="_blank" rel="noopener noreferrer" className="btn btn-primary mt-5 w-full py-3.5">Complete Registration <ExternalLink className="h-4 w-4" /></a>
             <div className="mt-3 flex items-center gap-2 rounded-xl border border-navy/10 bg-white p-2 pl-3">
-              <span className="min-w-0 flex-1 truncate text-xs text-navy/60">{REG_FORM_URL}</span>
+              <span className="min-w-0 flex-1 truncate text-xs text-navy/60">{regFormUrl}</span>
               <button type="button" onClick={copyLink} className="btn btn-outline !px-3 !py-2 text-xs">{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} {copied ? 'Copied' : 'Copy'}</button>
             </div>
             <p className="mt-3 text-center text-xs text-navy/45">Keep this link safe &mdash; it is your consultation registration form.</p>
