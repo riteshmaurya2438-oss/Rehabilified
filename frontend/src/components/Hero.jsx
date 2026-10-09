@@ -1,5 +1,5 @@
 import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion';
-import { ArrowRight, GraduationCap, Medal, Stethoscope } from 'lucide-react';
+import { ArrowRight, GraduationCap, Medal, Stethoscope, Video, UserCheck } from 'lucide-react';
 import { EASE, FloatingShapes, FounderPhoto, Magnetic, SplitText } from './ui';
 import { scrollToId } from '../lib/format';
 import { cn } from '../utils/cn';
@@ -53,8 +53,18 @@ export function Hero() {
 
           <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, delay: 2.75, ease: EASE }} className="mt-8 flex flex-col gap-3 sm:mt-9 sm:flex-row sm:flex-wrap sm:gap-4">
             <Magnetic className="block sm:inline-block">
-              <button onClick={() => scrollToId('appointment')} className="btn btn-primary w-full px-8 py-4 text-base sm:w-auto">
+              <button onClick={() => scrollToId('appointment')} data-testid="hero-book-appointment" className="btn btn-primary w-full px-8 py-4 text-base sm:w-auto">
                 Book Patient Appointment <ArrowRight className="h-4 w-4" />
+              </button>
+            </Magnetic>
+            <Magnetic className="block sm:inline-block">
+              <button onClick={() => scrollToId('lectures')} data-testid="hero-online-lecture" className="btn w-full border-2 border-royal bg-white px-7 py-4 text-base font-bold text-royal transition-colors hover:bg-royal hover:text-white sm:w-auto">
+                <Video className="h-4 w-4" /> Online Lecture
+              </button>
+            </Magnetic>
+            <Magnetic className="block sm:inline-block">
+              <button onClick={() => scrollToId('consultation')} data-testid="hero-consultation" className="btn w-full border-2 border-royal bg-white px-7 py-4 text-base font-bold text-royal transition-colors hover:bg-royal hover:text-white sm:w-auto">
+                <UserCheck className="h-4 w-4" /> 1:1 Consultation
               </button>
             </Magnetic>
           </motion.div>
