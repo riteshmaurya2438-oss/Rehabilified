@@ -1,14 +1,14 @@
 import { useState, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Images, X } from 'lucide-react';
-import { EASE, Reveal, SectionHeading } from './ui';
+import { EASE, Reveal } from './ui';
 
 const gallery = [
+  { src: 'images/gallery/5-group-photo.webp', alt: 'Group photo with physiotherapy students after a successful workshop', caption: 'Workshop Batch — All Smiles' },
   { src: 'images/gallery/1-award-iap.webp', alt: 'Dr. Sayyeda Uneza Fatima receiving award at 3rd National Conference of IAP Women Cell, New Delhi', caption: 'IAP Women Cell National Conference — New Delhi' },
   { src: 'images/gallery/2-training.webp', alt: 'Hands-on clinical training session with physiotherapy students', caption: 'Hands-on Clinical Training Session' },
   { src: 'images/gallery/3-seminar.webp', alt: 'Students attending an intensive physiotherapy seminar', caption: 'Intensive Physiotherapy Seminar' },
   { src: 'images/gallery/4-awp-conference.webp', alt: 'Award at World Physiotherapy AWP Regional Conference 2026', caption: 'World Physiotherapy AWP Regional Conference 2026' },
-  { src: 'images/gallery/5-group-photo.webp', alt: 'Group photo with physiotherapy students after a successful workshop', caption: 'Workshop Batch — All Smiles' },
 ];
 
 function Lightbox({ index, onClose, onPrev, onNext }) {
@@ -46,15 +46,15 @@ function Lightbox({ index, onClose, onPrev, onNext }) {
   );
 }
 
-function GalleryCard({ item, index, onClick, className = '', aspect = 'aspect-[4/3]' }) {
+function GalleryCard({ item, index, onClick, className = '' }) {
   return (
     <button
       onClick={() => onClick(index)}
-      className={`group relative block w-full cursor-pointer overflow-hidden rounded-2xl ${aspect} ${className}`}
+      className={`group relative block w-full cursor-pointer overflow-hidden rounded-2xl ${className}`}
       data-testid={`gallery-img-${index}`}
     >
       <img src={item.src} alt={item.alt} className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" loading="lazy" />
-      <div className="absolute inset-0 bg-gradient-to-t from-navy/80 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+      <div className="absolute inset-0 bg-gradient-to-t from-navy/70 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
       <div className="absolute bottom-0 left-0 right-0 translate-y-4 p-3 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100 sm:p-4">
         <p className="text-xs font-semibold text-white drop-shadow-lg sm:text-sm">{item.caption}</p>
       </div>
@@ -73,7 +73,6 @@ export function GallerySection() {
   return (
     <>
       <section className="relative overflow-hidden bg-navy py-24 sm:py-28" data-testid="gallery-section">
-        {/* Subtle decorative glow */}
         <div className="pointer-events-none absolute -left-40 -top-40 h-96 w-96 rounded-full bg-royal/20 blur-[120px]" />
         <div className="pointer-events-none absolute -bottom-32 -right-32 h-80 w-80 rounded-full bg-royal/15 blur-[100px]" />
 
@@ -92,35 +91,38 @@ export function GallerySection() {
             </div>
           </Reveal>
 
-          {/* Row 1: 3 images — portrait left, landscape center, portrait right */}
-          <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
-            <Reveal className="md:col-span-1">
-              <GalleryCard item={gallery[0]} index={0} onClick={open} aspect="aspect-[3/4]" />
-            </Reveal>
-            <Reveal delay={0.08} className="col-span-2 md:col-span-2">
-              <GalleryCard item={gallery[4]} index={4} onClick={open} aspect="aspect-[16/10]" />
-            </Reveal>
-            <Reveal delay={0.16} className="hidden md:block md:col-span-1">
-              <GalleryCard item={gallery[3]} index={3} onClick={open} aspect="aspect-[3/4]" />
-            </Reveal>
-          </div>
+          {/*
+            Layout: 
+            Row 1: Group photo (landscape, wide) + Award (portrait)
+            Row 2: Training (portrait) + Seminar (landscape) + AWP Conference (portrait)
+          */}
+          <div className="grid gap-3 sm:gap-4" style={{ gridTemplateColumns: '1fr', gridAutoRows: 'auto' }}>
+            {/* Row 1: Hero row — landscape wide + portrait */}
+            <div className="grid grid-cols-5 gap-3 sm:gap-4" style={{ height: 'clamp(260px, 32vw, 420px)' }}>
+              <Reveal className="col-span-5 sm:col-span-3">
+                <GalleryCard item={gallery[0]} index={0} onClick={open} className="h-full" />
+              </Reveal>
+              <Reveal delay={0.1} className="col-span-5 sm:col-span-2">
+                <GalleryCard item={gallery[1]} index={1} onClick={open} className="h-full" />
+              </Reveal>
+            </div>
 
-          {/* Row 2: 2 landscape filling full width + mobile fallback */}
-          <div className="mt-3 grid grid-cols-2 gap-3 sm:mt-4 sm:gap-4">
-            <Reveal delay={0.1}>
-              <GalleryCard item={gallery[1]} index={1} onClick={open} aspect="aspect-[4/3]" />
-            </Reveal>
-            <Reveal delay={0.18}>
-              <GalleryCard item={gallery[2]} index={2} onClick={open} aspect="aspect-[4/3]" />
-            </Reveal>
-            <Reveal delay={0.24} className="md:hidden">
-              <GalleryCard item={gallery[3]} index={3} onClick={open} aspect="aspect-[4/3]" />
-            </Reveal>
+            {/* Row 2: portrait + landscape + portrait */}
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-5" style={{ height: 'clamp(200px, 26vw, 340px)' }}>
+              <Reveal delay={0.12} className="col-span-1 md:col-span-1">
+                <GalleryCard item={gallery[2]} index={2} onClick={open} className="h-full" />
+              </Reveal>
+              <Reveal delay={0.18} className="col-span-1 md:col-span-3">
+                <GalleryCard item={gallery[3]} index={3} onClick={open} className="h-full" />
+              </Reveal>
+              <Reveal delay={0.24} className="col-span-2 md:col-span-1">
+                <GalleryCard item={gallery[4]} index={4} onClick={open} className="h-full" />
+              </Reveal>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Lightbox */}
       <AnimatePresence>
         {lightboxIdx !== null && <Lightbox index={lightboxIdx} onClose={close} onPrev={prev} onNext={next} />}
       </AnimatePresence>
