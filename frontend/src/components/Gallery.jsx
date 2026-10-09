@@ -107,15 +107,15 @@ export function GallerySection() {
               </Reveal>
             </div>
 
-            {/* Row 2: portrait + landscape + portrait */}
-            <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-5" style={{ height: 'clamp(200px, 26vw, 340px)' }}>
+            {/* Row 2: portrait + landscape + portrait (last photo wider) */}
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4" style={{ height: 'clamp(200px, 26vw, 340px)' }}>
               <Reveal delay={0.12} className="col-span-1 md:col-span-1">
                 <GalleryCard item={gallery[2]} index={2} onClick={open} className="h-full" />
               </Reveal>
-              <Reveal delay={0.18} className="col-span-1 md:col-span-3">
+              <Reveal delay={0.18} className="col-span-1 md:col-span-1">
                 <GalleryCard item={gallery[3]} index={3} onClick={open} className="h-full" />
               </Reveal>
-              <Reveal delay={0.24} className="col-span-2 md:col-span-1">
+              <Reveal delay={0.24} className="col-span-2 md:col-span-2">
                 <GalleryCard item={gallery[4]} index={4} onClick={open} className="h-full" />
               </Reveal>
             </div>
