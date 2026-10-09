@@ -4,11 +4,11 @@ import { ChevronLeft, ChevronRight, Images, X } from 'lucide-react';
 import { EASE, Reveal } from './ui';
 
 const gallery = [
-  { src: 'images/gallery/5-group-photo.webp', alt: 'Group photo with physiotherapy students after a successful workshop', caption: 'Workshop Batch — All Smiles' },
-  { src: 'images/gallery/1-award-iap.webp', alt: 'Dr. Sayyeda Uneza Fatima receiving award at 3rd National Conference of IAP Women Cell, New Delhi', caption: 'IAP Women Cell National Conference — New Delhi' },
-  { src: 'images/gallery/2-training.webp', alt: 'Hands-on clinical training session with physiotherapy students', caption: 'Hands-on Clinical Training Session' },
-  { src: 'images/gallery/3-seminar.webp', alt: 'Students attending an intensive physiotherapy seminar', caption: 'Intensive Physiotherapy Seminar' },
-  { src: 'images/gallery/4-awp-conference.webp', alt: 'Award at World Physiotherapy AWP Regional Conference 2026', caption: 'World Physiotherapy AWP Regional Conference 2026' },
+  { src: 'images/gallery/5-group-photo.webp', alt: 'Group photo with physiotherapy students after a successful workshop', caption: 'Workshop Batch — All Smiles', focus: 'center 40%' },
+  { src: 'images/gallery/1-award-iap.webp', alt: 'Dr. Sayyeda Uneza Fatima receiving award at 3rd National Conference of IAP Women Cell, New Delhi', caption: 'IAP Women Cell National Conference — New Delhi', focus: '35% 20%' },
+  { src: 'images/gallery/2-training.webp', alt: 'Hands-on clinical training session with physiotherapy students', caption: 'Hands-on Clinical Training Session', focus: 'center 30%' },
+  { src: 'images/gallery/3-seminar.webp', alt: 'Students attending an intensive physiotherapy seminar', caption: 'Intensive Physiotherapy Seminar', focus: 'center center' },
+  { src: 'images/gallery/4-awp-conference.webp', alt: 'Award at World Physiotherapy AWP Regional Conference 2026', caption: 'World Physiotherapy AWP Regional Conference 2026', focus: 'center 25%' },
 ];
 
 function Lightbox({ index, onClose, onPrev, onNext }) {
@@ -53,7 +53,7 @@ function GalleryCard({ item, index, onClick, className = '' }) {
       className={`group relative block w-full cursor-pointer overflow-hidden rounded-2xl ${className}`}
       data-testid={`gallery-img-${index}`}
     >
-      <img src={item.src} alt={item.alt} className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" loading="lazy" />
+      <img src={item.src} alt={item.alt} className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" style={{ objectPosition: item.focus || 'center center' }} loading="lazy" />
       <div className="absolute inset-0 bg-gradient-to-t from-navy/70 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
       <div className="absolute bottom-0 left-0 right-0 translate-y-4 p-3 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100 sm:p-4">
         <p className="text-xs font-semibold text-white drop-shadow-lg sm:text-sm">{item.caption}</p>
