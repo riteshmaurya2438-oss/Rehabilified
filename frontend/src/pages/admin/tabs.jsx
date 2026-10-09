@@ -132,7 +132,7 @@ export function Courses() {
         { key: 'price', label: 'Price (\u20b9)', type: 'number' },
         { key: 'description', label: 'Description', type: 'textarea', required: true },
         { key: 'link', label: 'Course access link', type: 'url', required: true, hint: 'Buyers get this link automatically after a successful payment (e.g. Google Drive, Notion, YouTube playlist).' },
-        { key: 'thumbnail', label: 'Thumbnail image URL', type: 'url', hint: 'Optional. A blue gradient is used if empty' },
+        { key: 'thumbnail', label: 'Thumbnail', type: 'image', hint: 'Upload an image or paste a URL. A blue gradient is used if empty.' },
         { key: 'published', label: 'Published (visible on website)', type: 'checkbox' },
       ]}
       summary={(c) => (

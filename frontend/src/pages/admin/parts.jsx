@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import toast from 'react-hot-toast';
-import { Download, Eye, EyeOff, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Download, Eye, EyeOff, ImageIcon, Pencil, Plus, Trash2, Upload, X } from 'lucide-react';
 import { downloadCSV } from '../../lib/format';
 import { audit } from '../../lib/adminAuth';
 import { strength } from '../../lib/security';
+import { fileToDataUrl } from '../../lib/image';
 import { cn } from '../../utils/cn';
 
 export const when = (iso) => new Date(iso).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
@@ -93,12 +94,50 @@ export function ResourceManager(p) {
         <form onSubmit={save} className="mt-5 rounded-3xl border border-royal/15 bg-white p-6">
           <div className="grid gap-4 sm:grid-cols-2">
             {p.fields.map((f) => (
-              <div key={f.key} className={cn(f.type === 'textarea' && 'sm:col-span-2', f.type === 'checkbox' && 'flex items-end')}>
+              <div key={f.key} className={cn((f.type === 'textarea' || f.type === 'image') && 'sm:col-span-2', f.type === 'checkbox' && 'flex items-end')}>
                 {f.type === 'checkbox' ? (
                   <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-navy/15 px-4 py-3 text-sm font-semibold">
                     <input type="checkbox" className="h-4 w-4 accent-[#0B6EDC]" checked={Boolean(read(f.key))} onChange={(e) => write(f.key, e.target.checked)} />
                     {f.label}
                   </label>
+                ) : f.type === 'image' ? (
+                  <>
+                    <label className="label">{f.label}</label>
+                    <div className="flex items-start gap-4">
+                      {read(f.key) ? (
+                        <div className="relative h-28 w-44 shrink-0 overflow-hidden rounded-xl border border-royal/15 bg-sky">
+                          <img src={read(f.key)} alt="Preview" className="h-full w-full object-cover" />
+                          <button type="button" onClick={() => write(f.key, '')} className="absolute right-1 top-1 rounded-full bg-navy/60 p-1 text-white transition hover:bg-red-600" aria-label="Remove">
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex h-28 w-44 shrink-0 items-center justify-center rounded-xl border-2 border-dashed border-navy/15 bg-sky/40 text-navy/30">
+                          <ImageIcon className="h-8 w-8" />
+                        </div>
+                      )}
+                      <div className="flex flex-col gap-2">
+                        <label className="btn btn-outline !py-2 cursor-pointer text-sm">
+                          <Upload className="h-4 w-4" /> Upload image
+                          <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            try {
+                              const data = await fileToDataUrl(file, 800, 'image/jpeg');
+                              write(f.key, data);
+                              toast.success('Thumbnail uploaded');
+                            } catch (err) {
+                              toast.error(err.message || 'Could not use that image');
+                            }
+                            e.target.value = '';
+                          }} />
+                        </label>
+                        <span className="text-xs text-navy/40">or paste URL below</span>
+                        <input className="field !py-2 text-xs" type="text" placeholder="https://..." value={String(read(f.key) ?? '')} onChange={(e) => write(f.key, e.target.value)} />
+                      </div>
+                    </div>
+                    {f.hint && <p className="mt-1 text-xs text-navy/45">{f.hint}</p>}
+                  </>
                 ) : (
                   <>
                     <label className="label">
