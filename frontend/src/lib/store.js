@@ -146,6 +146,37 @@ function syncSlot(slotId, booked) {
   fetch(`${SLOT_API}/${encodeURIComponent(slotId)}/${booked ? 'book' : 'release'}`, { method: 'POST' }).catch(() => {});
 }
 
+/* ---------- Server-backed purchases ---------- */
+const PURCHASES_API = `${process.env.REACT_APP_BACKEND_URL}/api/purchases`;
+
+function pushPurchase(data) {
+  fetch(PURCHASES_API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(data),
+  }).catch(() => {/* offline — local copy remains in Zustand */});
+}
+
+export async function fetchPurchases() {
+  try {
+    const res = await fetch(PURCHASES_API, { credentials: 'include' });
+    if (!res.ok) return [];
+    return await res.json();
+  } catch {
+    return [];
+  }
+}
+
+export async function cancelPurchaseOnServer(purchaseId) {
+  try {
+    const res = await fetch(`${PURCHASES_API}/${purchaseId}/cancel`, { method: 'PATCH', credentials: 'include' });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 const upsert = (arr, item) => (arr.some((x) => x.id === item.id) ? arr.map((x) => (x.id === item.id ? item : x)) : [...arr, item]);
 
 export const useDB = create()(
@@ -201,10 +232,12 @@ export const useDB = create()(
       registerLecture: ({ lectureId, user, phone, amount, paymentId }) => {
         const err = get().checkLecture(lectureId, user.email);
         if (err) return { ok: false, error: err };
+        const lec = get().lectures.find((l) => l.id === lectureId);
         const registration = {
           id: newId(), lectureId, userId: user.id, name: user.name, email: user.email, phone, amount, paymentId, createdAt: now(),
         };
         set((s) => ({ registrations: [registration, ...s.registrations] }));
+        pushPurchase({ type: 'registration', item_id: lectureId, item_title: lec?.title || '', phone, amount, payment_id: paymentId || '' });
         return { ok: true, data: registration };
       },
 
@@ -213,16 +246,19 @@ export const useDB = create()(
         if (!s.courses.some((c) => c.id === courseId)) return { ok: false, error: 'This course is no longer available.' };
         const existing = s.enrollments.find((e) => e.courseId === courseId && e.userId === user.id);
         if (existing) return { ok: true, data: existing };
+        const course = s.courses.find((c) => c.id === courseId);
         const enrollment = {
           id: newId(), courseId, userId: user.id, name: user.name, email: user.email, phone, amount, paymentId, createdAt: now(),
         };
         set((st) => ({ enrollments: [enrollment, ...st.enrollments] }));
+        pushPurchase({ type: 'enrollment', item_id: courseId, item_title: course?.title || '', phone, amount, payment_id: paymentId || '' });
         return { ok: true, data: enrollment };
       },
 
       bookConsultation: ({ slotId, user, phone, goal, amount, paymentId }) => {
         const err = get().checkSlot(slotId);
         if (err) return { ok: false, error: err };
+        const slot = get().slots.find((x) => x.id === slotId);
         const booking = {
           id: newId(), slotId, userId: user.id, name: user.name, email: user.email, phone, goal, amount, paymentId, status: 'confirmed', createdAt: now(),
         };
@@ -231,6 +267,7 @@ export const useDB = create()(
           slots: s.slots.map((x) => (x.id === slotId ? { ...x, booked: true } : x)),
         }));
         syncSlot(slotId, true);
+        pushPurchase({ type: 'booking', item_id: slotId, item_title: '1:1 Career Clarity Consultation', phone, amount, payment_id: paymentId || '', goal, slot_date: slot?.date || '', slot_time: slot?.time || '' });
         return { ok: true, data: booking };
       },
 

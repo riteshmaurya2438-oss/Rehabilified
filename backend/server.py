@@ -566,6 +566,79 @@ async def release_slot(slot_id: str):
     return await _set_slot_booked(slot_id, False)
 
 
+# ---------------- Student purchases (server-backed) ----------------
+class PurchaseCreate(BaseModel):
+    type: str          # "enrollment" | "registration" | "booking"
+    item_id: str       # courseId, lectureId, or slotId
+    item_title: str = ""
+    phone: str = ""
+    amount: float = 0
+    payment_id: str = ""
+    goal: str = ""           # consultation goal
+    slot_date: str = ""      # for bookings
+    slot_time: str = ""      # for bookings
+    status: str = "confirmed"
+    extra: dict = {}         # any additional data
+
+
+@api_router.post("/purchases")
+async def create_purchase(req: PurchaseCreate, request: Request):
+    user = await _current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Sign in to record a purchase.")
+    doc = {
+        "purchase_id": f"pur_{uuid.uuid4().hex[:12]}",
+        "user_id": user["user_id"],
+        "email": user.get("email", ""),
+        "name": user.get("name", ""),
+        "type": req.type,
+        "item_id": req.item_id,
+        "item_title": req.item_title,
+        "phone": req.phone,
+        "amount": req.amount,
+        "payment_id": req.payment_id,
+        "goal": req.goal,
+        "slot_date": req.slot_date,
+        "slot_time": req.slot_time,
+        "status": req.status,
+        "extra": req.extra,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.purchases.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.get("/purchases")
+async def get_purchases(request: Request):
+    user = await _current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Sign in to view purchases.")
+    cursor = db.purchases.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1)
+    return await cursor.to_list(500)
+
+
+@api_router.patch("/purchases/{purchase_id}/cancel")
+async def cancel_purchase(purchase_id: str, request: Request):
+    user = await _current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Sign in to cancel a purchase.")
+    res = await db.purchases.update_one(
+        {"purchase_id": purchase_id, "user_id": user["user_id"]},
+        {"$set": {"status": "cancelled"}},
+    )
+    if not res.matched_count:
+        raise HTTPException(status_code=404, detail="Purchase not found.")
+    # Release the slot if it was a booking
+    doc = await db.purchases.find_one({"purchase_id": purchase_id}, {"_id": 0})
+    if doc and doc.get("type") == "booking" and doc.get("item_id"):
+        try:
+            await _set_slot_booked(doc["item_id"], False)
+        except Exception:
+            pass
+    return {"ok": True}
+
+
 # Include the router in the main app
 app.include_router(api_router)
 
