@@ -101,12 +101,30 @@ class VerifyPaymentRequest(BaseModel):
     email: Optional[str] = None
 
 
+def _kind_to_purchase_type(kind: str) -> str:
+    return {"lecture": "registration", "course": "enrollment", "consultation": "booking"}.get(kind or "", "")
+
+
 @api_router.post("/create-order")
-async def create_order(req: CreateOrderRequest):
+async def create_order(req: CreateOrderRequest, request: Request):
     if razorpay_client is None:
         raise HTTPException(status_code=503, detail="Payment gateway is not configured.")
     if req.amount <= 0:
         raise HTTPException(status_code=400, detail="Amount must be greater than zero.")
+
+    # Duplicate check: if the user is authenticated and item is a course/lecture, reject repeat purchases
+    user = await _current_user(request)
+    purchase_type = _kind_to_purchase_type(req.kind)
+    if user and req.refId and purchase_type in ("enrollment", "registration"):
+        existing = await db.purchases.find_one({
+            "user_id": user["user_id"],
+            "item_id": req.refId,
+            "type": purchase_type,
+            "status": {"$ne": "cancelled"},
+        })
+        if existing:
+            raise HTTPException(status_code=409, detail="You have already purchased this item.")
+
     amount_paise = int(round(req.amount * 100))
     receipt = f"rb_{uuid.uuid4().hex[:18]}"  # must be <= 40 chars
     try:
@@ -136,6 +154,7 @@ async def create_order(req: CreateOrderRequest):
         "email": req.email,
         "name": req.name,
         "phone": req.phone,
+        "user_id": user["user_id"] if user else None,
         "status": "created",
         "verified": False,
         "payment_id": None,
@@ -145,7 +164,7 @@ async def create_order(req: CreateOrderRequest):
 
 
 @api_router.post("/verify-payment")
-async def verify_payment(req: VerifyPaymentRequest):
+async def verify_payment(req: VerifyPaymentRequest, request: Request):
     if razorpay_client is None:
         raise HTTPException(status_code=503, detail="Payment gateway is not configured.")
     try:
@@ -161,6 +180,7 @@ async def verify_payment(req: VerifyPaymentRequest):
         )
         raise HTTPException(status_code=400, detail="Payment signature verification failed.")
 
+    paid_at = datetime.now(timezone.utc).isoformat()
     await db.payments.update_one(
         {"order_id": req.razorpay_order_id},
         {"$set": {
@@ -168,10 +188,73 @@ async def verify_payment(req: VerifyPaymentRequest):
             "verified": True,
             "payment_id": req.razorpay_payment_id,
             "signature": req.razorpay_signature,
-            "paid_at": datetime.now(timezone.utc).isoformat(),
+            "paid_at": paid_at,
         }},
     )
-    return {"verified": True}
+
+    # --- Auto-create a purchase record linked to the authenticated user ---
+    purchase = None
+    payment_doc = await db.payments.find_one({"order_id": req.razorpay_order_id}, {"_id": 0})
+    user = await _current_user(request)
+    kind = (payment_doc or {}).get("kind") or req.kind or ""
+    ref_id = (payment_doc or {}).get("refId") or req.refId or ""
+    purchase_type = _kind_to_purchase_type(kind)
+
+    if user and purchase_type and ref_id:
+        # Prevent duplicate purchase record for same user + item
+        existing = await db.purchases.find_one({
+            "user_id": user["user_id"],
+            "item_id": ref_id,
+            "type": purchase_type,
+            "status": {"$ne": "cancelled"},
+        })
+        if not existing:
+            # Resolve item title from site_content
+            item_title = (payment_doc or {}).get("label") or ""
+            if not item_title:
+                content = await db.site_content.find_one({"_id": "singleton"})
+                if content:
+                    if purchase_type == "enrollment":
+                        match = next((c for c in (content.get("courses") or []) if isinstance(c, dict) and c.get("id") == ref_id), None)
+                    elif purchase_type == "registration":
+                        match = next((l for l in (content.get("lectures") or []) if isinstance(l, dict) and l.get("id") == ref_id), None)
+                    else:
+                        match = None
+                    if match:
+                        item_title = match.get("title", "")
+
+            # Resolve slot details for bookings
+            slot_date, slot_time = "", ""
+            if purchase_type == "booking" and content:
+                slot = next((s for s in (content.get("slots") or []) if isinstance(s, dict) and s.get("id") == ref_id), None)
+                if slot:
+                    slot_date = slot.get("date", "")
+                    slot_time = slot.get("time", "")
+                    item_title = item_title or "1:1 Career Clarity Consultation"
+
+            purchase = {
+                "purchase_id": f"pur_{uuid.uuid4().hex[:12]}",
+                "user_id": user["user_id"],
+                "email": user.get("email", (payment_doc or {}).get("email", "")),
+                "name": user.get("name", (payment_doc or {}).get("name", "")),
+                "type": purchase_type,
+                "item_id": ref_id,
+                "item_title": item_title,
+                "phone": (payment_doc or {}).get("phone", ""),
+                "amount": ((payment_doc or {}).get("amount", 0)) / 100,  # paise → rupees
+                "payment_id": req.razorpay_payment_id,
+                "order_id": req.razorpay_order_id,
+                "goal": "",
+                "slot_date": slot_date,
+                "slot_time": slot_time,
+                "status": "confirmed",
+                "extra": {},
+                "created_at": paid_at,
+            }
+            await db.purchases.insert_one(purchase)
+            purchase.pop("_id", None)
+
+    return {"verified": True, "purchase": purchase}
 
 
 # ---------------- Emergent Google Authentication ----------------

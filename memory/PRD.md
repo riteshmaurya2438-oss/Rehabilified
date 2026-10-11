@@ -20,16 +20,17 @@ Clone a React + Vite + Tailwind v4 + TS frontend-only website ("Rehabilified" by
 7. Hostinger VPS deployment guide (Oct 2026)
 8. MongoDB-backed content sync for admin edits (Oct 2026)
 9. Secured admin panel with setup code + lockout (Oct 2026)
-10. Admin credentials reset for fresh setup (Oct 2026)
-11. Replaced AI-generated SVG logo with actual Rehabilified brand logo (Oct 2026)
-12. Splash animation updated with real logo (Oct 2026)
-13. Premium gallery section with 5 photos, masonry layout, lightbox (Oct 2026)
-14. Gallery photos fixed — tilted image corrected, focal points adjusted (Oct 2026)
-15. Hero section: added Online Lecture + 1:1 Consultation buttons (Oct 2026)
-16. Course thumbnail upload in admin panel (Oct 2026)
-17. Admin editable 1:1 consultation prices (30-min, 60-min) and form URL (Oct 2026)
-18. Course checkout "lessons.length" bug fixed — replaced with "Lifetime access" (Oct 2026)
-19. Student purchases (enrollments, registrations, bookings) moved to MongoDB linked to user ID (Oct 2026)
+10. Replaced AI-generated SVG logo with actual Rehabilified brand logo (Oct 2026)
+11. Splash animation updated with real logo (Oct 2026)
+12. Premium gallery section with 5 photos, masonry layout, lightbox (Oct 2026)
+13. Gallery photos fixed — tilted image corrected, focal points adjusted (Oct 2026)
+14. Hero section: added Online Lecture + 1:1 Consultation buttons (Oct 2026)
+15. Course thumbnail upload in admin panel (Oct 2026)
+16. Admin editable 1:1 consultation prices (30-min, 60-min) and form URL (Oct 2026)
+17. Course checkout "lessons.length" bug fixed (Oct 2026)
+18. Student purchases moved to MongoDB linked to user ID (Oct 2026)
+19. Server-side purchase record creation on payment verification (Oct 2026)
+20. Duplicate charge prevention for already-purchased items (Oct 2026)
 
 ## Key Credentials
 - Admin Setup Code: `RB-SUF2025REHAB`
@@ -38,42 +39,32 @@ Clone a React + Vite + Tailwind v4 + TS frontend-only website ("Rehabilified" by
 - MongoDB: localhost:27017, DB: test_database (preview) / rehabilified (production)
 
 ## DB Collections
-- `site_content`: Global KV store for site content (lectures, courses, FAQs, stats, settings, slots)
-- `admin_auth`: Admin credentials (hash, token, recoveryCode)
-- `admin_sessions`: Admin session tokens
-- `users`: Google OAuth users (user_id, email, name, picture)
-- `user_sessions`: User session tokens
-- `payments`: Razorpay payment records (order_id, amount, status, verified)
+- `site_content`: Global KV store for site content
+- `admin_auth` / `admin_sessions`: Admin credentials and sessions
+- `users` / `user_sessions`: Google OAuth users and sessions
+- `payments`: Razorpay payment records (order_id, amount, status, verified, user_id)
 - `purchases`: Student purchases linked to user_id (type, item_id, item_title, amount, payment_id, status)
 
 ## API Endpoints
-- `POST /api/create-order` — Initiate Razorpay order
-- `POST /api/verify-payment` — Validate Razorpay HMAC signature
-- `POST /api/auth/session` — Handle Emergent Google Sign-in
-- `GET /api/auth/me` — Get current user
-- `POST /api/auth/logout` — Logout
-- `GET/PUT /api/content` — Fetch/Update global site content
-- `GET /api/admin/status` — Check admin config
-- `POST /api/admin/setup` — Setup admin with code
-- `POST /api/purchases` — Record student purchase (auth required)
+- `POST /api/create-order` — Initiate Razorpay order (with duplicate check for authenticated users)
+- `POST /api/verify-payment` — Validate HMAC + auto-create purchase record
+- `POST /api/auth/session` — Google Sign-in
+- `GET /api/auth/me` — Current user
+- `GET/PUT /api/content` — Global site content
+- `GET /api/admin/status` + `POST /api/admin/setup` — Admin management
+- `POST /api/purchases` — Manual purchase creation (auth required)
 - `GET /api/purchases` — Fetch user's purchases (auth required)
-- `PATCH /api/purchases/{id}/cancel` — Cancel a booking (auth required)
+- `PATCH /api/purchases/{id}/cancel` — Cancel booking (auth required)
 
 ## Pending / Upcoming Tasks (P0-P2)
 ### P0
-- Assist with Oracle Cloud Free VPS deployment (user's preferred hosting)
+- Oracle Cloud Free VPS deployment guide
 
 ### P1
-- Verify live Razorpay payment end-to-end once deployed
 - Favicon update with real logo
 - Open Graph meta tags for social sharing
 - Admin view of all student purchases
 
 ### P2
-- Refactor server.py into modular APIRouters (~660 lines)
+- Refactor server.py into modular APIRouters (~700 lines)
 - Gallery management from admin panel
-
-## Deployment
-- User chose **Oracle Cloud Always Free VPS** for hosting
-- Deployment guide exists: `/app/DEPLOY_HOSTINGER_VPS.md`
-- Need to create Oracle Cloud-specific guide

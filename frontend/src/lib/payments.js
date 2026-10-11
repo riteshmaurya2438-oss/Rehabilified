@@ -45,8 +45,13 @@ async function liveCheckout(req) {
   const res = await fetch(`${API_BASE}/create-order`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ amount: req.amount, currency: 'INR', kind: req.kind, refId: req.refId, email: req.email }),
+    credentials: 'include',
+    body: JSON.stringify({ amount: req.amount, currency: 'INR', kind: req.kind, refId: req.refId, label: req.label, email: req.email, name: req.name, phone: req.phone }),
   });
+  if (res.status === 409) {
+    const err = await res.json();
+    throw new Error(err.detail || 'You have already purchased this item.');
+  }
   if (!res.ok) throw new Error('We could not start the payment. Please try again.');
   const order = await res.json();
   await loadRazorpay();
@@ -66,11 +71,12 @@ async function liveCheckout(req) {
           const v = await fetch(`${API_BASE}/verify-payment`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify({ ...r, kind: req.kind, refId: req.refId, email: req.email }),
           });
           const out = await v.json();
           if (!v.ok || !out.verified) throw new Error('Payment verification failed. If you were charged, please contact us on WhatsApp.');
-          resolve(makePayment(req, { orderId: r.razorpay_order_id, paymentId: r.razorpay_payment_id, verified: true, mode: 'razorpay' }));
+          resolve(makePayment(req, { orderId: r.razorpay_order_id, paymentId: r.razorpay_payment_id, verified: true, mode: 'razorpay', purchase: out.purchase }));
         } catch (e) {
           reject(e);
         }
