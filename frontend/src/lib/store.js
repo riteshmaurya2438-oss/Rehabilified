@@ -386,12 +386,6 @@ export const useSession = create()(
   persist(
     (set) => ({
       user: null,
-      signIn: (name, email) => {
-        const clean = email.trim().toLowerCase();
-        const user = { id: 'u-' + clean, name: name.trim(), email: clean };
-        set({ user });
-        return user;
-      },
       signOut: () => set({ user: null }),
     }),
     { name: 'rehabilified-session' },
