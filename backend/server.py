@@ -209,28 +209,34 @@ async def verify_payment(req: VerifyPaymentRequest, request: Request):
             "status": {"$ne": "cancelled"},
         })
         if not existing:
-            # Resolve item title from site_content
+            # Resolve item title and access link from site_content
             item_title = (payment_doc or {}).get("label") or ""
-            if not item_title:
-                content = await db.site_content.find_one({"_id": "singleton"})
+            access_link = ""
+            content = await db.site_content.find_one({"_id": "singleton"})
+            if not item_title or purchase_type in ("enrollment", "registration"):
                 if content:
                     if purchase_type == "enrollment":
                         match = next((c for c in (content.get("courses") or []) if isinstance(c, dict) and c.get("id") == ref_id), None)
+                        if match:
+                            item_title = item_title or match.get("title", "")
+                            access_link = match.get("link", "")
                     elif purchase_type == "registration":
                         match = next((l for l in (content.get("lectures") or []) if isinstance(l, dict) and l.get("id") == ref_id), None)
+                        if match:
+                            item_title = item_title or match.get("title", "")
+                            access_link = match.get("joinLink", "")
                     else:
                         match = None
-                    if match:
-                        item_title = match.get("title", "")
 
             # Resolve slot details for bookings
             slot_date, slot_time = "", ""
-            if purchase_type == "booking" and content:
-                slot = next((s for s in (content.get("slots") or []) if isinstance(s, dict) and s.get("id") == ref_id), None)
-                if slot:
-                    slot_date = slot.get("date", "")
-                    slot_time = slot.get("time", "")
-                    item_title = item_title or "1:1 Career Clarity Consultation"
+            if purchase_type == "booking":
+                if content:
+                    slot = next((s for s in (content.get("slots") or []) if isinstance(s, dict) and s.get("id") == ref_id), None)
+                    if slot:
+                        slot_date = slot.get("date", "")
+                        slot_time = slot.get("time", "")
+                item_title = item_title or "1:1 Career Clarity Consultation"
 
             purchase = {
                 "purchase_id": f"pur_{uuid.uuid4().hex[:12]}",
@@ -240,6 +246,7 @@ async def verify_payment(req: VerifyPaymentRequest, request: Request):
                 "type": purchase_type,
                 "item_id": ref_id,
                 "item_title": item_title,
+                "access_link": access_link,
                 "phone": (payment_doc or {}).get("phone", ""),
                 "amount": ((payment_doc or {}).get("amount", 0)) / 100,  # paise → rupees
                 "payment_id": req.razorpay_payment_id,
@@ -654,6 +661,7 @@ class PurchaseCreate(BaseModel):
     type: str          # "enrollment" | "registration" | "booking"
     item_id: str       # courseId, lectureId, or slotId
     item_title: str = ""
+    access_link: str = ""
     phone: str = ""
     amount: float = 0
     payment_id: str = ""
@@ -677,6 +685,7 @@ async def create_purchase(req: PurchaseCreate, request: Request):
         "type": req.type,
         "item_id": req.item_id,
         "item_title": req.item_title,
+        "access_link": req.access_link,
         "phone": req.phone,
         "amount": req.amount,
         "payment_id": req.payment_id,

@@ -149,6 +149,7 @@ export function CheckoutModal() {
 
       const u = signIn(name, email);
       let paymentId;
+      let serverPurchaseId;
       if (info.amount > 0) {
         const p = await requestPayment({ kind: target.kind, refId: target.refId, label: info.title, amount: info.amount, name: u.name, email: u.email, phone });
         if (!p) return; // payment window closed
@@ -158,6 +159,7 @@ export function CheckoutModal() {
           return;
         }
         paymentId = p.paymentId;
+        serverPurchaseId = p.purchase?.purchase_id;
       }
 
       if (target.kind === 'lecture') {
@@ -168,7 +170,7 @@ export function CheckoutModal() {
         }
         close();
         toast.success('You are registered!');
-        navigate(`/thank-you/lecture/${r.data.id}`);
+        navigate(`/thank-you/lecture/${serverPurchaseId || r.data.id}`);
       } else if (target.kind === 'course') {
         const r = store.enroll({ courseId: target.refId, user: u, phone, amount: info.amount, paymentId });
         if (!r.ok) {
@@ -177,7 +179,7 @@ export function CheckoutModal() {
         }
         close();
         toast.success('Course unlocked!');
-        navigate(`/thank-you/course/${r.data.id}`);
+        navigate(`/thank-you/course/${serverPurchaseId || r.data.id}`);
       } else {
         const r = store.bookConsultation({ slotId: target.refId, user: u, phone, goal: `${role} \u2014 ${goal.trim()}`, amount: info.amount, paymentId });
         if (!r.ok) {
@@ -186,7 +188,7 @@ export function CheckoutModal() {
         }
         close();
         toast.success('Consultation booked!');
-        navigate(`/thank-you/consultation/${r.data.id}`);
+        navigate(`/thank-you/consultation/${serverPurchaseId || r.data.id}`);
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Something went wrong. Please try again.');

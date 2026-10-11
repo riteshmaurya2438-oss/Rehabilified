@@ -57,6 +57,9 @@ const labelOf = (x) => {
   return String(r.title ?? r.name ?? r.q ?? r.id ?? '');
 };
 
+const URL_RE = /^https?:\/\/.+/i;
+function isValidUrl(v) { return !v || URL_RE.test(String(v).trim()); }
+
 /* ============ Generic add / edit / delete manager ============ */
 export function ResourceManager(p) {
   const [draft, setDraft] = useState(null);
@@ -69,6 +72,10 @@ export function ResourceManager(p) {
     for (const f of p.fields) {
       if (f.required && !String(read(f.key) ?? '').trim()) {
         toast.error(`${f.label} is required.`);
+        return;
+      }
+      if (f.type === 'url' && read(f.key) && !isValidUrl(read(f.key))) {
+        toast.error(`${f.label} must be a valid URL starting with http:// or https://`);
         return;
       }
     }
@@ -154,6 +161,12 @@ export function ResourceManager(p) {
                       </select>
                     ) : (
                       <input className="field" type={f.type === 'url' ? 'text' : f.type} value={String(read(f.key) ?? '')} onChange={(e) => write(f.key, f.type === 'number' ? Number(e.target.value) : e.target.value)} />
+                    )}
+                    {f.type === 'url' && read(f.key) && !isValidUrl(read(f.key)) && (
+                      <p className="mt-1 text-xs font-semibold text-red-500">Must be a valid URL starting with http:// or https://</p>
+                    )}
+                    {f.type === 'url' && f.required && !read(f.key) && (
+                      <p className="mt-1 text-xs font-semibold text-amber-600">Link is missing — buyers won't get access after payment.</p>
                     )}
                     {f.hint && <p className="mt-1 text-xs text-navy/45">{f.hint}</p>}
                   </>

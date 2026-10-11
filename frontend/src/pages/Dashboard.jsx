@@ -93,26 +93,28 @@ export function Dashboard() {
           <div className="mt-6 space-y-4">
             {tab === 'reg' && (myRegs.length === 0 ? <Empty text={'You haven\u2019t registered for any lectures yet.'} to="/" label="Browse lectures" /> : myRegs.map((r) => {
               const l = lectures.find((x) => x.id === r.item_id);
+              const link = r.access_link || l?.joinLink;
               return (
                 <div key={r.purchase_id || r.item_id} className="card flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between" data-testid="purchase-registration">
                   <div>
                     <h3 className="text-lg font-bold">{r.item_title || l?.title || 'Lecture'}</h3>
                     <p className="mt-1 text-sm text-navy/60">{l ? `${fmtDate(l.date)} \u00b7 ${fmtTime(l.time)} IST \u00b7 ${l.mode}` : ''} &middot; {inr(r.amount)}</p>
                   </div>
-                  {l?.joinLink && <a href={l.joinLink} target="_blank" rel="noopener noreferrer" className="btn btn-primary shrink-0"><Video className="h-4 w-4" /> Join link</a>}
+                  {link && <a href={link} target="_blank" rel="noopener noreferrer" className="btn btn-primary shrink-0" data-testid="lecture-join-link"><Video className="h-4 w-4" /> Join link</a>}
                 </div>
               );
             }))}
 
             {tab === 'courses' && (myEnrolls.length === 0 ? <Empty text={'You haven\u2019t purchased a course yet.'} to="/" label="Explore courses" /> : myEnrolls.map((e) => {
               const c = courses.find((x) => x.id === e.item_id);
+              const link = e.access_link || c?.link;
               return (
                 <div key={e.purchase_id || e.item_id} className="card flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between" data-testid="purchase-enrollment">
                   <div>
                     <h3 className="text-lg font-bold">{e.item_title || c?.title || 'Course'}</h3>
                     <p className="text-sm text-navy/60">Purchased &middot; {inr(e.amount)} &middot; Lifetime access</p>
                   </div>
-                  {c?.link && <a href={c.link} target="_blank" rel="noopener noreferrer" className="btn btn-primary shrink-0">Open course <ArrowRight className="h-4 w-4" /></a>}
+                  {link && <a href={link} target="_blank" rel="noopener noreferrer" className="btn btn-primary shrink-0" data-testid="course-access-link">Open course <ArrowRight className="h-4 w-4" /></a>}
                 </div>
               );
             }))}
