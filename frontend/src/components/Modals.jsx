@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { ShieldCheck } from 'lucide-react';
 import { Modal } from './ui';
-import { useDB, useSession } from '../lib/store';
+import { recordFreePurchase, useDB, useSession } from '../lib/store';
 import { useUI } from '../lib/ui';
 import { makePayment, requestPayment } from '../lib/payments';
 import { fmtDate, fmtTime, inr } from '../lib/format';
@@ -108,6 +108,19 @@ export function CheckoutModal() {
         }
         paymentId = p.paymentId;
         serverPurchaseId = p.purchase?.purchase_id;
+      } else {
+        const slot = target.kind === 'consultation' ? slots.find((x) => x.id === target.refId) : null;
+        const free = await recordFreePurchase({
+          type: target.kind === 'lecture' ? 'registration' : target.kind === 'course' ? 'enrollment' : 'booking',
+          item_id: target.refId,
+          item_title: info.title,
+          phone,
+          amount: 0,
+          goal: target.kind === 'consultation' ? `${role} — ${goal.trim()}` : '',
+          slot_date: slot?.date ?? '',
+          slot_time: slot?.time ?? '',
+        });
+        serverPurchaseId = free?.purchase_id ?? null;
       }
 
       if (target.kind === 'lecture') {

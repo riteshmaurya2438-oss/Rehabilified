@@ -314,13 +314,17 @@ async def auth_session(body: SessionRequest, response: Response):
         await db.users.update_one({"user_id": user_id}, {"$set": {"name": data.get("name", existing.get("name")), "picture": data.get("picture", existing.get("picture"))}})
     else:
         user_id = f"user_{uuid.uuid4().hex[:12]}"
-        await db.users.insert_one({
-            "user_id": user_id,
-            "email": email,
-            "name": data.get("name", ""),
-            "picture": data.get("picture", ""),
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        })
+        try:
+            await db.users.insert_one({
+                "user_id": user_id,
+                "email": email,
+                "name": data.get("name", ""),
+                "picture": data.get("picture", ""),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+        except DuplicateKeyError:
+            existing = await db.users.find_one({"email": email}, {"_id": 0})
+            user_id = existing["user_id"]
 
     session_token = data.get("session_token") or uuid.uuid4().hex
     expires_at = datetime.now(timezone.utc) + timedelta(days=SESSION_DAYS)
@@ -710,6 +714,36 @@ async def get_purchases(request: Request):
     return await cursor.to_list(500)
 
 
+@api_router.get("/admin/purchases")
+async def admin_list_purchases(request: Request, type: Optional[str] = None):
+    await require_admin(request)
+    query = {"type": type} if type else {}
+    cursor = db.purchases.find(query, {"_id": 0}).sort("created_at", -1)
+    return await cursor.to_list(1000)
+
+
+@api_router.get("/admin/payments")
+async def admin_list_payments(request: Request):
+    await require_admin(request)
+    cursor = db.payments.find({}, {"_id": 0}).sort("created_at", -1)
+    return await cursor.to_list(1000)
+
+
+@api_router.patch("/admin/purchases/{purchase_id}/cancel")
+async def admin_cancel_purchase(purchase_id: str, request: Request):
+    await require_admin(request)
+    res = await db.purchases.update_one({"purchase_id": purchase_id}, {"$set": {"status": "cancelled"}})
+    if not res.matched_count:
+        raise HTTPException(status_code=404, detail="Purchase not found.")
+    doc = await db.purchases.find_one({"purchase_id": purchase_id}, {"_id": 0})
+    if doc and doc.get("type") == "booking" and doc.get("item_id"):
+        try:
+            await _set_slot_booked(doc["item_id"], False)
+        except Exception:
+            pass
+    return {"ok": True}
+
+
 @api_router.patch("/purchases/{purchase_id}/cancel")
 async def cancel_purchase(purchase_id: str, request: Request):
     user = await _current_user(request)
@@ -748,6 +782,11 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+@app.on_event("startup")
+async def ensure_user_email_index():
+    await db.users.create_index("email", unique=True)
+
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

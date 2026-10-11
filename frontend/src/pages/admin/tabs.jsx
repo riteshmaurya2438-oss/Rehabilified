@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { ImageIcon, Plus, Trash2, Upload } from 'lucide-react';
-import { newId, useDB } from '../../lib/store';
+import { adminCancelPurchase, adminFetchPayments, adminFetchPurchases, newId, useDB } from '../../lib/store';
 import { fmtDate, fmtTime, inr, todayISO } from '../../lib/format';
 import { fileToDataUrl } from '../../lib/image';
 import { audit, IDLE_MS, useAudit, useAuth } from '../../lib/adminAuth';
@@ -12,13 +12,24 @@ import { DataTable, PasswordInput, Pill, ResourceManager, StrengthMeter, when } 
 /* ---------------- Overview ---------------- */
 export function Overview({ go }) {
   const db = useDB();
-  const revenue = db.payments.filter((p) => p.status === 'paid').reduce((a, p) => a + p.amount, 0);
+  const [serverCounts, setServerCounts] = useState({ regs: 0, enrolls: 0, bookings: 0, revenue: 0 });
+  useEffect(() => {
+    Promise.all([adminFetchPurchases(), adminFetchPayments()]).then(([purchases, payments]) => {
+      setServerCounts({
+        regs: purchases.filter((p) => p.type === 'registration').length,
+        enrolls: purchases.filter((p) => p.type === 'enrollment').length,
+        bookings: purchases.filter((p) => p.type === 'booking' && p.status === 'confirmed').length,
+        revenue: payments.filter((p) => p.status === 'paid').reduce((a, p) => a + (p.amount || 0), 0),
+      });
+    });
+  }, []);
+  const revenue = serverCounts.revenue;
   const cards = [
     ['Lectures', db.lectures.length],
     ['Courses', db.courses.length],
-    ['Lecture registrations', db.registrations.length],
-    ['Course enrollments', db.enrollments.length],
-    ['1:1 bookings', db.bookings.filter((b) => b.status === 'confirmed').length],
+    ['Lecture registrations', serverCounts.regs],
+    ['Course enrollments', serverCounts.enrolls],
+    ['1:1 bookings', serverCounts.bookings],
     ['Patient requests', db.appointments.length],
     ['Open slots', db.slots.filter((s) => !s.booked && s.date >= todayISO()).length],
   ];
@@ -257,10 +268,16 @@ export function SlotsTab() {
 
 /* ---------------- Registrations / payments / appointments ---------------- */
 export function Registrations() {
-  const regs = useDB((s) => s.registrations);
-  const enrolls = useDB((s) => s.enrollments);
+  const [regs, setRegs] = useState([]);
+  const [enrolls, setEnrolls] = useState([]);
   const lectures = useDB((s) => s.lectures);
   const courses = useDB((s) => s.courses);
+  useEffect(() => {
+    adminFetchPurchases().then((all) => {
+      setRegs(all.filter((p) => p.type === 'registration').map((p) => ({ ...p, createdAt: p.created_at, lectureId: p.item_id })));
+      setEnrolls(all.filter((p) => p.type === 'enrollment').map((p) => ({ ...p, createdAt: p.created_at, courseId: p.item_id })));
+    });
+  }, []);
   const lt = (id) => lectures.find((l) => l.id === id)?.title ?? '\u2014';
   const ct = (id) => courses.find((c) => c.id === id)?.title ?? '\u2014';
   return (
@@ -296,7 +313,10 @@ export function Registrations() {
 }
 
 export function PaymentsTab() {
-  const payments = useDB((s) => s.payments);
+  const [payments, setPayments] = useState([]);
+  useEffect(() => {
+    adminFetchPayments().then((rows) => setPayments(rows.map((p) => ({ ...p, createdAt: p.created_at, orderId: p.order_id, paymentId: p.payment_id }))));
+  }, []);
   return (
     <DataTable
       title="Payments"
@@ -319,10 +339,12 @@ export function PaymentsTab() {
 
 export function AppointmentsTab() {
   const appts = useDB((s) => s.appointments);
-  const bookings = useDB((s) => s.bookings);
   const slots = useDB((s) => s.slots);
   const setStatus = useDB((s) => s.setAppointmentStatus);
-  const cancelBooking = useDB((s) => s.cancelBooking);
+  const [bookings, setBookings] = useState([]);
+  const loadBookings = () => adminFetchPurchases().then((all) => setBookings(all.filter((p) => p.type === 'booking').map((p) => ({ ...p, createdAt: p.created_at, slotId: p.item_id }))));
+  useEffect(() => { loadBookings(); }, []);
+  const cancelBooking = async (purchaseId) => { await adminCancelPurchase(purchaseId); loadBookings(); };
   const slotText = (id) => {
     const s = slots.find((x) => x.id === id);
     return s ? `${fmtDate(s.date)} \u00b7 ${fmtTime(s.time)}` : '\u2014';
@@ -365,7 +387,7 @@ export function AppointmentsTab() {
         rows={bookings}
         cols={[
           { h: 'Booked', v: (r) => when(r.createdAt), csv: (r) => r.createdAt },
-          { h: 'Session', v: (r) => slotText(r.slotId), csv: (r) => slotText(r.slotId) },
+          { h: 'Session', v: (r) => (r.slot_date ? `${fmtDate(r.slot_date)} · ${fmtTime(r.slot_time)}` : slotText(r.slotId)), csv: (r) => (r.slot_date ? `${r.slot_date} ${r.slot_time}` : slotText(r.slotId)) },
           { h: 'Name', v: (r) => r.name, csv: (r) => r.name },
           { h: 'Email', v: (r) => r.email, csv: (r) => r.email },
           { h: 'Phone', v: (r) => r.phone, csv: (r) => r.phone },
@@ -378,7 +400,7 @@ export function AppointmentsTab() {
                   className="text-xs font-semibold text-red-600 hover:underline"
                   onClick={() => {
                     if (window.confirm('Cancel this booking and release the slot?')) {
-                      cancelBooking(r.id);
+                      cancelBooking(r.purchase_id);
                       audit('Consultation cancelled', r.name);
                     }
                   }}

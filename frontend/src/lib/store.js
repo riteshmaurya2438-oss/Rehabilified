@@ -159,6 +159,54 @@ function syncSlot(slotId, booked) {
 
 /* ---------- Server-backed purchases ---------- */
 const PURCHASES_API = `${process.env.REACT_APP_BACKEND_URL}/api/purchases`;
+const ADMIN_API = `${process.env.REACT_APP_BACKEND_URL}/api/admin`;
+
+export async function adminFetchPurchases() {
+  const token = adminToken();
+  if (!token) return [];
+  try {
+    const res = await fetch(`${ADMIN_API}/purchases`, { headers: { Authorization: `Bearer ${token}` } });
+    return res.ok ? await res.json() : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function adminFetchPayments() {
+  const token = adminToken();
+  if (!token) return [];
+  try {
+    const res = await fetch(`${ADMIN_API}/payments`, { headers: { Authorization: `Bearer ${token}` } });
+    return res.ok ? await res.json() : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function adminCancelPurchase(purchaseId) {
+  const token = adminToken();
+  if (!token) return null;
+  try {
+    const res = await fetch(`${ADMIN_API}/purchases/${purchaseId}/cancel`, { method: 'PATCH', headers: { Authorization: `Bearer ${token}` } });
+    return res.ok ? await res.json() : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function recordFreePurchase(payload) {
+  try {
+    const res = await fetch(PURCHASES_API, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return res.ok ? await res.json() : null;
+  } catch {
+    return null;
+  }
+}
 
 export async function fetchPurchases() {
   try {
