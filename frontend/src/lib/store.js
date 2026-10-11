@@ -16,10 +16,12 @@ const L = (id, module, title, duration) => ({ id, module, title, duration, video
 
 function seedSlots() {
   const out = [];
-  for (let d = 1; d <= 10; d++) {
-    if (addDays(new Date(), d).getDay() === 0) continue; // closed on Sundays
+  for (let d = 1; d <= 14; d++) {
+    const day = addDays(new Date(), d);
+    const dow = day.getDay(); // 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu
+    if (dow < 1 || dow > 4) continue; // Mon-Thu only
     const date = iso(d);
-    ['11:00', '16:00', '18:30'].forEach((t) => out.push({ id: `c-${date}-${t}`, kind: 'consultation', date, time: t, booked: false }));
+    ['14:00', '15:00', '16:00', '17:00'].forEach((t) => out.push({ id: `c-${date}-${t}`, kind: 'consultation', date, time: t, booked: false }));
     ['10:00', '12:00', '15:00', '17:00'].forEach((t) => out.push({ id: `p-${date}-${t}`, kind: 'patient', date, time: t, booked: false }));
   }
   return out;
@@ -78,6 +80,11 @@ function seed() {
         price: 2499,
         link: 'https://your-course-link.example.com/icu-foundations',
         published: true,
+        parts: [
+          { title: 'Part 1: Understanding the ICU Environment', description: 'Monitors, lines, ventilators and your role as a physio.' },
+          { title: 'Part 2: Patient Assessment in ICU', description: 'Readiness screening, safety checks, and clinical reasoning.' },
+          { title: 'Part 3: Progressive Mobilisation', description: 'Step-wise mobilisation from bed exercises to ambulation.' },
+        ],
       },
       {
         id: 'course-clinical-reasoning',
@@ -88,6 +95,10 @@ function seed() {
         price: 1799,
         link: 'https://your-course-link.example.com/clinical-reasoning',
         published: true,
+        parts: [
+          { title: 'Part 1: Structured Assessment', description: 'Frameworks for gathering and organising patient data.' },
+          { title: 'Part 2: Hypothesis & Goal Setting', description: 'Building clinical hypotheses and setting SMART goals.' },
+        ],
       },
     ],
     slots: seedSlots(),

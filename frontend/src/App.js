@@ -15,6 +15,9 @@ import { AuthModal, CheckoutModal, PayModal } from './components/Modals';
 import { Admin } from './pages/admin/AdminApp';
 import { Dashboard } from './pages/Dashboard';
 import { ThankYou } from './pages/ThankYou';
+import { CoursePage } from './pages/CoursePage';
+import { LecturePage } from './pages/LecturePage';
+import { ConsultationPage } from './pages/ConsultationPage';
 import { useSEO } from './lib/seo';
 import { EASE } from './components/ui';
 
@@ -141,6 +144,9 @@ function Shell() {
         >
           <Routes location={location}>
             <Route path="/" element={<Home />} />
+            <Route path="/course/:courseId" element={<CoursePage />} />
+            <Route path="/lecture/:lectureId" element={<LecturePage />} />
+            <Route path="/consultation" element={<ConsultationPage />} />
             <Route path="/thank-you/:type/:id" element={<ThankYou />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/admin" element={<Admin />} />

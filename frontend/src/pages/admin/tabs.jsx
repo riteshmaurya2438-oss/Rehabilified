@@ -119,6 +119,20 @@ export function Courses() {
   const items = useDB((s) => s.courses);
   const save = useDB((s) => s.saveCourse);
   const del = useDB((s) => s.removeCourse);
+
+  function addPart(course) {
+    const parts = [...(course.parts || []), { title: '', description: '' }];
+    save({ ...course, parts });
+  }
+  function updatePart(course, idx, field, value) {
+    const parts = (course.parts || []).map((p, i) => (i === idx ? { ...p, [field]: value } : p));
+    save({ ...course, parts });
+  }
+  function removePart(course, idx) {
+    const parts = (course.parts || []).filter((_, i) => i !== idx);
+    save({ ...course, parts });
+  }
+
   return (
     <ResourceManager
       title="Courses"
@@ -126,7 +140,7 @@ export function Courses() {
       items={items}
       onSave={save}
       onDelete={del}
-      blank={() => ({ id: newId(), title: '', description: '', thumbnail: '', price: 999, link: '', published: true })}
+      blank={() => ({ id: newId(), title: '', description: '', thumbnail: '', price: 999, link: '', published: true, parts: [] })}
       fields={[
         { key: 'title', label: 'Course title', type: 'text', required: true },
         { key: 'price', label: 'Price (\u20b9)', type: 'number' },
@@ -141,9 +155,30 @@ export function Courses() {
             {c.title} {!c.published && <Pill ok={false}>Hidden</Pill>}
           </p>
           <p className="truncate text-xs text-navy/55">
-            {inr(c.price)} &middot; {c.link || 'No link set'}
+            {inr(c.price)} &middot; {(c.parts || []).length} parts &middot; {c.link || 'No link set'}
           </p>
         </>
+      )}
+      extra={(draft, setDraft) => (
+        <div className="sm:col-span-2">
+          <label className="label">Course Parts / Modules</label>
+          <div className="space-y-3">
+            {(draft.parts || []).map((part, i) => (
+              <div key={i} className="flex gap-2 rounded-xl border border-navy/10 bg-sky/30 p-3">
+                <div className="flex-1 space-y-2">
+                  <input className="field !py-2 text-sm font-semibold" placeholder={`Part ${i + 1} title`} value={part.title} onChange={(e) => { const parts = [...(draft.parts||[])]; parts[i] = { ...parts[i], title: e.target.value }; setDraft({ ...draft, parts }); }} />
+                  <input className="field !py-2 text-xs" placeholder="Short description (optional)" value={part.description || ''} onChange={(e) => { const parts = [...(draft.parts||[])]; parts[i] = { ...parts[i], description: e.target.value }; setDraft({ ...draft, parts }); }} />
+                </div>
+                <button type="button" onClick={() => { const parts = (draft.parts||[]).filter((_,j) => j !== i); setDraft({ ...draft, parts }); }} className="shrink-0 self-start rounded-lg p-2 text-red-500 transition hover:bg-red-50">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+            <button type="button" onClick={() => setDraft({ ...draft, parts: [...(draft.parts||[]), { title: '', description: '' }] })} className="btn btn-outline !py-2 text-sm">
+              <Plus className="h-4 w-4" /> Add part
+            </button>
+          </div>
+        </div>
       )}
     />
   );

@@ -61,6 +61,7 @@ export function LecturesSection() {
                         {left > 0 && <ArrowRight className="h-4 w-4" />}
                       </button>
                     )}
+                    <Link to={`/lecture/${l.id}`} className="mt-2 block text-center text-xs font-semibold text-royal/60 hover:text-royal" data-testid={`lecture-deeplink-${l.id}`}>View details &amp; shareable link</Link>
                   </article>
                 </Reveal>
               );
@@ -105,6 +106,17 @@ export function CoursesSection() {
                     <div className="flex flex-1 flex-col p-6">
                       <h3 className="text-xl font-bold text-navy">{c.title}</h3>
                       <p className="mt-3 flex-1 text-sm leading-relaxed text-navy/65">{c.description}</p>
+                      {c.parts?.length > 0 && (
+                        <div className="mt-3 space-y-1">
+                          {c.parts.slice(0, 3).map((p, j) => (
+                            <p key={j} className="flex items-center gap-2 text-xs text-navy/60">
+                              <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-royal/10 text-[10px] font-bold text-royal">{j + 1}</span>
+                              {p.title}
+                            </p>
+                          ))}
+                          {c.parts.length > 3 && <p className="text-xs font-semibold text-royal/60">+{c.parts.length - 3} more parts</p>}
+                        </div>
+                      )}
                       <p className="mt-4 flex items-center gap-2 text-xs font-medium text-navy/60">
                         <ShieldCheck className="h-3.5 w-3.5 text-royal" /> Instant access link after payment
                       </p>
@@ -115,6 +127,7 @@ export function CoursesSection() {
                           Buy &middot; {inr(c.price)} <ArrowRight className="h-4 w-4" />
                         </button>
                       )}
+                      <Link to={`/course/${c.id}`} className="mt-2 block text-center text-xs font-semibold text-royal/60 hover:text-royal" data-testid={`course-deeplink-${c.id}`}>View details &amp; shareable link</Link>
                     </div>
                   </article>
                 </Reveal>
