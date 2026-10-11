@@ -111,7 +111,7 @@ export function CheckoutModal() {
     if (l) info = { title: l.title, subtitle: `${fmtDate(l.date)} \u00b7 ${fmtTime(l.time)} IST \u00b7 ${l.mode}`, amount: l.price };
   } else if (target?.kind === 'course') {
     const c = courses.find((x) => x.id === target.refId);
-    if (c) info = { title: c.title, subtitle: `${c.lessons.length} video lessons \u00b7 lifetime access`, amount: c.price };
+    if (c) info = { title: c.title, subtitle: c.description ? `${c.description.slice(0, 80)}${c.description.length > 80 ? '\u2026' : ''} \u00b7 Lifetime access` : 'Lifetime access', amount: c.price };
   } else if (target?.kind === 'consultation') {
     const s = slots.find((x) => x.id === target.refId);
     if (s) info = { title: '1:1 Career Clarity Consultation', subtitle: `${fmtDate(s.date)} \u00b7 ${fmtTime(s.time)} IST \u00b7 Video call`, amount: consultPrice };
