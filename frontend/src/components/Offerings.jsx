@@ -1,13 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { AlertTriangle, ArrowRight, Award, BookOpen, Check, CheckCircle2, Clock, Copy, ExternalLink, GraduationCap, Play, ShieldAlert, ShieldCheck, Users, Video } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, Award, BookOpen, Calendar, Check, CheckCircle2, Clock, Copy, ExternalLink, GraduationCap, Loader2, Play, ShieldAlert, ShieldCheck, Users, Video } from 'lucide-react';
 import { Modal, Reveal, SectionHeading } from './ui';
 import { useDB, useSession } from '../lib/store';
 import { useUI } from '../lib/ui';
-import { requestPayment } from '../lib/payments';
+import { requestPayment, API_BASE } from '../lib/payments';
 import { dayNum, fmtDate, fmtTime, inr, monthShort, todayISO, weekdayShort } from '../lib/format';
 import { cn } from '../utils/cn';
+import { addDays, format } from 'date-fns';
 
 /* ---------------- 4. Upcoming lectures (dynamic) ---------------- */
 export function LecturesSection() {
@@ -196,8 +197,8 @@ function SlotPicker({ kind, selected, onSelect }) {
 function useConsultOptions() {
   const settings = useDB((s) => s.settings);
   return useMemo(() => [
-    { id: 'cc-30', short: '30-Minute Consultation', label: '30-Minute Career Clarity Consultation', duration: '30 minutes', price: settings.consultation30Price || 799, blurb: 'A focused session to get clear, honest answers on your most pressing career question.' },
-    { id: 'cc-60', short: '60-Minute Consultation', label: '60-Minute Career Clarity Consultation', duration: '60 minutes', price: settings.consultation60Price || 999, blurb: 'A deeper session to map your options, specialisation and a step-by-step plan.', popular: true },
+    { id: 'cc-30', short: '30-Minute Consultation', label: '30-Minute Career Clarity Consultation', duration: '30 minutes', mins: 30, price: settings.consultation30Price || 799, blurb: 'A focused session to get clear, honest answers on your most pressing career question.' },
+    { id: 'cc-60', short: '60-Minute Consultation', label: '60-Minute Career Clarity Consultation', duration: '60 minutes', mins: 60, price: settings.consultation60Price || 999, blurb: 'A deeper session to map your options, specialisation and a step-by-step plan.', popular: true },
   ], [settings.consultation30Price, settings.consultation60Price]);
 }
 
@@ -220,45 +221,111 @@ const CONSULT_TOPICS = [
 const ccEmailOk = (e) => /^\S+@\S+\.\S+$/.test(e.trim());
 const ccPhoneOk = (p) => p.replace(/\D/g, '').length >= 10;
 
+/** Compute Mon–Thu dates within the next 7 days */
+function getAvailableDates() {
+  const dates = [];
+  const today = new Date();
+  for (let d = 1; d <= 7; d++) {
+    const day = addDays(today, d);
+    const dow = day.getDay(); // 0=Sun … 4=Thu
+    if (dow >= 1 && dow <= 4) {
+      dates.push({ date: format(day, 'yyyy-MM-dd'), label: format(day, 'EEE, d MMM'), dayName: format(day, 'EEEE') });
+    }
+  }
+  return dates;
+}
+
 export function ConsultationSection() {
   const addPayment = useDB((s) => s.addPayment);
   const consultOptions = useConsultOptions();
   const regFormUrl = useFormUrl();
-  const [chosen, setChosen] = useState(null);
-  const [step, setStep] = useState('form'); // form | success | failed
+
+  // Modal state
+  const [chosen, setChosen] = useState(null);        // selected consultation option
+  const [step, setStep] = useState('date');           // date | time | form | success | failed
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [selectedTime, setSelectedTime] = useState(null);
+  const [slots, setSlots] = useState([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+
+  // Form state
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  const availableDates = useMemo(getAvailableDates, []);
+
   function book(option) {
     setChosen(option);
-    setStep('form');
+    setStep('date');
+    setSelectedDate(null);
+    setSelectedTime(null);
+    setSlots([]);
     setBusy(false);
   }
+
   function closeModal() {
     if (busy) return;
     setChosen(null);
   }
 
+  const fetchSlots = useCallback(async (date, duration) => {
+    setLoadingSlots(true);
+    setSlots([]);
+    try {
+      const res = await fetch(`${API_BASE}/consultation-slots?date=${date}&duration=${duration}`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Could not load slots.');
+      const data = await res.json();
+      setSlots(data.slots || []);
+    } catch {
+      toast.error('Could not load available time slots. Please try again.');
+    } finally {
+      setLoadingSlots(false);
+    }
+  }, []);
+
+  function pickDate(d) {
+    setSelectedDate(d);
+    setSelectedTime(null);
+    setStep('time');
+    fetchSlots(d.date, chosen.mins);
+  }
+
+  function pickTime(t) {
+    setSelectedTime(t);
+    setStep('form');
+  }
+
   async function pay(e) {
     e.preventDefault();
-    if (!chosen) return;
+    if (!chosen || !selectedDate || !selectedTime) return;
     if (name.trim().length < 2) return void toast.error('Please enter your full name.');
     if (!ccEmailOk(email)) return void toast.error('Please enter a valid email address.');
     if (!ccPhoneOk(phone)) return void toast.error('Please enter a valid phone number.');
     setBusy(true);
     try {
-      const p = await requestPayment({ kind: 'consultation', refId: chosen.id, label: chosen.label, amount: chosen.price, name: name.trim(), email: email.trim(), phone: phone.trim() });
-      if (!p) { setBusy(false); return; } // user closed the payment window — not successful
+      const p = await requestPayment({
+        kind: 'consultation',
+        refId: chosen.id,
+        label: chosen.label,
+        amount: chosen.price,
+        name: name.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        slot_date: selectedDate.date,
+        slot_time: selectedTime.time,
+        slot_duration: chosen.mins,
+      });
+      if (!p) { setBusy(false); return; }
       if (p.status === 'paid' && p.verified) {
         addPayment({ ...p, name: name.trim(), phone: phone.trim() });
         setStep('success');
       } else {
         setStep('failed');
       }
-    } catch (err) {
+    } catch {
       setStep('failed');
     } finally {
       setBusy(false);
@@ -271,6 +338,14 @@ export function ConsultationSection() {
       window.setTimeout(() => setCopied(false), 2000);
     });
   }
+
+  const endTimeLabel = selectedTime && chosen ? (() => {
+    const [h, m] = selectedTime.time.split(':').map(Number);
+    const em = m + chosen.mins;
+    const eh = h + Math.floor(em / 60);
+    const efm = em % 60;
+    return fmtTime(`${eh.toString().padStart(2,'0')}:${efm.toString().padStart(2,'0')}`);
+  })() : '';
 
   return (
     <section id="consultation" className="relative overflow-hidden bg-gradient-to-b from-white to-sky/60 py-24 sm:py-32">
@@ -300,7 +375,7 @@ export function ConsultationSection() {
                 <h3 className="mt-4 text-xl font-bold text-navy">{o.short}</h3>
                 <p className="mt-2 flex-1 text-sm leading-relaxed text-navy/65">{o.blurb}</p>
                 <p className="mt-5 font-display text-4xl font-extrabold text-royal">{inr(o.price)}<span className="ml-2 text-sm font-medium text-navy/50">one session</span></p>
-                <button className="btn btn-primary mt-5 w-full py-3.5" onClick={() => book(o)}>Book Now <ArrowRight className="h-4 w-4" /></button>
+                <button data-testid={`book-${o.id}`} className="btn btn-primary mt-5 w-full py-3.5" onClick={() => book(o)}>Book Now <ArrowRight className="h-4 w-4" /></button>
               </article>
             </Reveal>
           ))}
@@ -334,51 +409,138 @@ export function ConsultationSection() {
         </div>
       </div>
 
-      <Modal open={!!chosen} onClose={closeModal} title={step === 'success' ? 'Payment successful' : step === 'failed' ? 'Payment not confirmed' : 'Career Clarity Consultation'} wide>
-        {chosen && step === 'form' && (
-          <form onSubmit={pay} className="mt-5 space-y-4">
-            <div className="rounded-2xl bg-sky p-4">
-              <p className="font-semibold text-navy">{chosen.label}</p>
-              <p className="mt-1 flex items-center gap-2 text-sm text-navy/65"><Clock className="h-4 w-4 text-royal" /> {chosen.duration} &middot; 1:1 video call</p>
-              <p className="mt-3 font-display text-3xl font-extrabold text-royal">{inr(chosen.price)}</p>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div><label className="label" htmlFor="cc-name">Full name</label><input id="cc-name" className="field" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" /></div>
-              <div><label className="label" htmlFor="cc-phone">Phone / WhatsApp</label><input id="cc-phone" type="tel" className="field" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98765 43210" autoComplete="tel" /></div>
-              <div className="sm:col-span-2"><label className="label" htmlFor="cc-email">Email</label><input id="cc-email" type="email" className="field" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email" /></div>
-            </div>
-            <button className="btn btn-primary w-full py-3.5" disabled={busy}>{busy ? 'Opening secure checkout\u2026' : `Pay ${inr(chosen.price)} securely`}</button>
-            <p className="flex items-center justify-center gap-2 text-center text-xs text-navy/50"><ShieldCheck className="h-4 w-4 text-royal" /> Secure payment via Razorpay (INR). The registration link is shown only after your payment is confirmed.</p>
-          </form>
-        )}
+      {/* ---- Booking Modal ---- */}
+      <Modal open={!!chosen} onClose={closeModal} title={
+        step === 'success' ? 'Payment successful' :
+        step === 'failed' ? 'Payment not confirmed' :
+        step === 'date' ? 'Select a Date' :
+        step === 'time' ? 'Select a Time Slot' :
+        'Confirm & Pay'
+      } wide>
+        {chosen && (
+          <>
+            {/* Summary bar */}
+            {step !== 'success' && step !== 'failed' && (
+              <div className="mb-4 rounded-2xl bg-sky p-3 text-sm">
+                <p className="font-semibold text-navy">{chosen.label}</p>
+                <div className="mt-1 flex flex-wrap gap-3 text-navy/65">
+                  <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5 text-royal" /> {chosen.duration}</span>
+                  {selectedDate && <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5 text-royal" /> {selectedDate.label}</span>}
+                  {selectedTime && <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5 text-royal" /> {fmtTime(selectedTime.time)} – {endTimeLabel}</span>}
+                </div>
+                <p className="mt-2 font-display text-2xl font-extrabold text-royal">{inr(chosen.price)}</p>
+              </div>
+            )}
 
-        {chosen && step === 'success' && (
-          <div className="mt-5">
-            <div className="flex flex-col items-center text-center">
-              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500 text-white"><CheckCircle2 className="h-9 w-9" /></span>
-              <h4 className="mt-4 font-display text-2xl font-extrabold text-navy">Payment Successful &#10003;</h4>
-              <p className="mt-2 text-sm text-navy/65">Your consultation payment has been received for the <strong>{chosen.short}</strong> ({inr(chosen.price)}).</p>
-            </div>
-            <div className="mt-5 rounded-2xl border border-royal/15 bg-sky p-4 text-sm text-navy/75">
-              <p className="font-semibold text-navy">Next step: complete the registration form</p>
-              <p className="mt-1">Please complete the registration form so Dr. Fatima can receive your details and prepare for your consultation. Your payment is confirmed; the consultation time is arranged after you submit this form.</p>
-            </div>
-            <a href={regFormUrl} target="_blank" rel="noopener noreferrer" className="btn btn-primary mt-5 w-full py-3.5">Complete Registration <ExternalLink className="h-4 w-4" /></a>
-            <div className="mt-3 flex items-center gap-2 rounded-xl border border-navy/10 bg-white p-2 pl-3">
-              <span className="min-w-0 flex-1 truncate text-xs text-navy/60">{regFormUrl}</span>
-              <button type="button" onClick={copyLink} className="btn btn-outline !px-3 !py-2 text-xs">{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} {copied ? 'Copied' : 'Copy'}</button>
-            </div>
-            <p className="mt-3 text-center text-xs text-navy/45">Keep this link safe &mdash; it is your consultation registration form.</p>
-          </div>
-        )}
+            {/* Step: Date */}
+            {step === 'date' && (
+              <div data-testid="slot-date-picker">
+                <p className="mb-3 text-sm text-navy/60">Choose a day for your consultation (Monday – Thursday, next 7 days):</p>
+                {availableDates.length === 0 ? (
+                  <p className="rounded-xl bg-amber-50 p-4 text-center text-sm text-amber-800">No available dates in the next 7 days. Please check back later.</p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    {availableDates.map((d) => (
+                      <button key={d.date} data-testid={`date-${d.date}`} onClick={() => pickDate(d)}
+                        className="group rounded-xl border-2 border-navy/10 bg-white p-4 text-left transition hover:border-royal hover:shadow-md">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-royal">{d.dayName}</p>
+                        <p className="mt-1 text-lg font-bold text-navy">{d.label.split(', ')[1]}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
-        {chosen && step === 'failed' && (
-          <div className="mt-5 text-center">
-            <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100 text-red-600"><AlertTriangle className="h-9 w-9" /></span>
-            <h4 className="mt-4 font-display text-xl font-extrabold text-navy">Payment could not be confirmed. Please try again.</h4>
-            <p className="mt-2 text-sm text-navy/65">You have not received the registration link because the payment was not confirmed. If any amount was deducted for a failed attempt, your bank auto-refunds it.</p>
-            <button className="btn btn-primary mt-5 w-full py-3.5" onClick={() => setStep('form')}>Try Payment Again</button>
-          </div>
+            {/* Step: Time */}
+            {step === 'time' && (
+              <div data-testid="slot-time-picker">
+                <button onClick={() => setStep('date')} className="mb-3 flex items-center gap-1 text-sm text-royal hover:underline"><ArrowLeft className="h-3.5 w-3.5" /> Change date</button>
+                <p className="mb-3 text-sm text-navy/60">Pick a time slot on <strong>{selectedDate?.label}</strong>:</p>
+                {loadingSlots ? (
+                  <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-royal" /></div>
+                ) : slots.filter(s => s.available).length === 0 ? (
+                  <div className="rounded-xl bg-amber-50 p-4 text-center text-sm text-amber-800">
+                    No slots available on this date. <button onClick={() => setStep('date')} className="font-semibold text-royal underline">Pick another date</button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    {slots.map((s) => {
+                      const startLabel = fmtTime(s.time);
+                      const [h, m] = s.time.split(':').map(Number);
+                      const em = m + chosen.mins;
+                      const eh = h + Math.floor(em / 60);
+                      const efm = em % 60;
+                      const endLabel = fmtTime(`${eh.toString().padStart(2,'0')}:${efm.toString().padStart(2,'0')}`);
+                      return (
+                        <button key={s.time} data-testid={`time-${s.time}`} disabled={!s.available} onClick={() => pickTime(s)}
+                          className={cn(
+                            'rounded-xl border-2 p-4 text-center transition',
+                            s.available ? 'border-navy/10 bg-white hover:border-royal hover:shadow-md' : 'cursor-not-allowed border-navy/5 bg-gray-50 opacity-50'
+                          )}>
+                          <p className={cn('text-lg font-bold', s.available ? 'text-navy' : 'text-navy/40')}>{startLabel}</p>
+                          <p className="text-xs text-navy/50">{startLabel} – {endLabel}</p>
+                          {!s.available && <span className="mt-1 inline-block rounded bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-600">Booked</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Step: Form + Pay */}
+            {step === 'form' && (
+              <div data-testid="slot-form">
+                <button onClick={() => { setStep('time'); fetchSlots(selectedDate.date, chosen.mins); }} className="mb-3 flex items-center gap-1 text-sm text-royal hover:underline"><ArrowLeft className="h-3.5 w-3.5" /> Change time</button>
+                <form onSubmit={pay} className="space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div><label className="label" htmlFor="cc-name">Full name</label><input id="cc-name" data-testid="cc-name" className="field" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" /></div>
+                    <div><label className="label" htmlFor="cc-phone">Phone / WhatsApp</label><input id="cc-phone" data-testid="cc-phone" type="tel" className="field" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98765 43210" autoComplete="tel" /></div>
+                    <div className="sm:col-span-2"><label className="label" htmlFor="cc-email">Email</label><input id="cc-email" data-testid="cc-email" type="email" className="field" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email" /></div>
+                  </div>
+                  <button data-testid="cc-pay-btn" className="btn btn-primary w-full py-3.5" disabled={busy}>{busy ? 'Opening secure checkout\u2026' : `Pay ${inr(chosen.price)} securely`}</button>
+                  <p className="flex items-center justify-center gap-2 text-center text-xs text-navy/50"><ShieldCheck className="h-4 w-4 text-royal" /> Secure payment via Razorpay (INR). The registration link is shown only after your payment is confirmed.</p>
+                </form>
+              </div>
+            )}
+
+            {/* Step: Success */}
+            {step === 'success' && (
+              <div className="mt-5" data-testid="booking-success">
+                <div className="flex flex-col items-center text-center">
+                  <span className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500 text-white"><CheckCircle2 className="h-9 w-9" /></span>
+                  <h4 className="mt-4 font-display text-2xl font-extrabold text-navy">Booking Confirmed &#10003;</h4>
+                  <p className="mt-2 text-sm text-navy/65">Your consultation payment has been received for the <strong>{chosen.short}</strong> ({inr(chosen.price)}).</p>
+                  {selectedDate && selectedTime && (
+                    <p className="mt-2 rounded-lg bg-royal/10 px-4 py-2 text-sm font-semibold text-royal">
+                      <Calendar className="mr-1 inline h-4 w-4" />{selectedDate.label} &middot; {fmtTime(selectedTime.time)} – {endTimeLabel}
+                    </p>
+                  )}
+                </div>
+                <div className="mt-5 rounded-2xl border border-royal/15 bg-sky p-4 text-sm text-navy/75">
+                  <p className="font-semibold text-navy">Next step: complete the registration form</p>
+                  <p className="mt-1">Please complete the registration form so Dr. Fatima can receive your details and prepare for your consultation. Your slot is now reserved.</p>
+                </div>
+                <a href={regFormUrl} target="_blank" rel="noopener noreferrer" className="btn btn-primary mt-5 w-full py-3.5">Complete Registration <ExternalLink className="h-4 w-4" /></a>
+                <div className="mt-3 flex items-center gap-2 rounded-xl border border-navy/10 bg-white p-2 pl-3">
+                  <span className="min-w-0 flex-1 truncate text-xs text-navy/60">{regFormUrl}</span>
+                  <button type="button" onClick={copyLink} className="btn btn-outline !px-3 !py-2 text-xs">{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} {copied ? 'Copied' : 'Copy'}</button>
+                </div>
+                <p className="mt-3 text-center text-xs text-navy/45">Keep this link safe &mdash; it is your consultation registration form.</p>
+              </div>
+            )}
+
+            {/* Step: Failed */}
+            {step === 'failed' && (
+              <div className="mt-5 text-center">
+                <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100 text-red-600"><AlertTriangle className="h-9 w-9" /></span>
+                <h4 className="mt-4 font-display text-xl font-extrabold text-navy">Payment could not be confirmed. Please try again.</h4>
+                <p className="mt-2 text-sm text-navy/65">You have not received the registration link because the payment was not confirmed. If any amount was deducted for a failed attempt, your bank auto-refunds it.</p>
+                <button className="btn btn-primary mt-5 w-full py-3.5" onClick={() => setStep('date')}>Try Again</button>
+              </div>
+            )}
+          </>
         )}
       </Modal>
     </section>

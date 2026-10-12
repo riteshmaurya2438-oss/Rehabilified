@@ -19,7 +19,7 @@ export function Overview({ go }) {
         regs: purchases.filter((p) => p.type === 'registration').length,
         enrolls: purchases.filter((p) => p.type === 'enrollment').length,
         bookings: purchases.filter((p) => p.type === 'booking' && p.status === 'confirmed').length,
-        revenue: payments.filter((p) => p.status === 'paid').reduce((a, p) => a + (p.amount || 0), 0),
+        revenue: payments.filter((p) => p.status === 'paid').reduce((a, p) => a + (p.amount || 0) / 100, 0),
       });
     });
   }, []);
@@ -326,7 +326,7 @@ export function PaymentsTab() {
         { h: 'Date', v: (r) => when(r.createdAt), csv: (r) => r.createdAt },
         { h: 'Email', v: (r) => r.email, csv: (r) => r.email },
         { h: 'Item', v: (r) => r.label, csv: (r) => r.label },
-        { h: 'Amount', v: (r) => inr(r.amount), csv: (r) => r.amount },
+        { h: 'Amount', v: (r) => inr((r.amount || 0) / 100), csv: (r) => (r.amount || 0) / 100 },
         { h: 'Status', v: (r) => <Pill ok={r.status === 'paid'}>{r.status}</Pill>, csv: (r) => r.status },
         { h: 'Mode', v: (r) => (r.mode === 'demo' ? 'Demo' : 'Razorpay'), csv: (r) => r.mode },
         { h: 'Signature verified', v: (r) => (r.verified ? 'Yes' : 'No'), csv: (r) => (r.verified ? 'yes' : 'no') },

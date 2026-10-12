@@ -90,6 +90,9 @@ class CreateOrderRequest(BaseModel):
     email: Optional[str] = None
     name: Optional[str] = None
     phone: Optional[str] = None
+    slot_date: Optional[str] = None      # YYYY-MM-DD for consultation slots
+    slot_time: Optional[str] = None      # HH:MM for consultation slots
+    slot_duration: Optional[int] = None  # 30 or 60
 
 
 class VerifyPaymentRequest(BaseModel):
@@ -155,6 +158,9 @@ async def create_order(req: CreateOrderRequest, request: Request):
         "name": req.name,
         "phone": req.phone,
         "user_id": user["user_id"] if user else None,
+        "slot_date": req.slot_date,
+        "slot_time": req.slot_time,
+        "slot_duration": req.slot_duration,
         "status": "created",
         "verified": False,
         "payment_id": None,
@@ -201,65 +207,88 @@ async def verify_payment(req: VerifyPaymentRequest, request: Request):
     purchase_type = _kind_to_purchase_type(kind)
 
     if user and purchase_type and ref_id:
-        # Prevent duplicate purchase record for same user + item
-        existing = await db.purchases.find_one({
-            "user_id": user["user_id"],
-            "item_id": ref_id,
-            "type": purchase_type,
-            "status": {"$ne": "cancelled"},
-        })
-        if not existing:
-            # Resolve item title and access link from site_content
-            item_title = (payment_doc or {}).get("label") or ""
-            access_link = ""
-            content = await db.site_content.find_one({"_id": "singleton"})
-            if not item_title or purchase_type in ("enrollment", "registration"):
-                if content:
-                    if purchase_type == "enrollment":
-                        match = next((c for c in (content.get("courses") or []) if isinstance(c, dict) and c.get("id") == ref_id), None)
-                        if match:
-                            item_title = item_title or match.get("title", "")
-                            access_link = match.get("link", "")
-                    elif purchase_type == "registration":
-                        match = next((l for l in (content.get("lectures") or []) if isinstance(l, dict) and l.get("id") == ref_id), None)
-                        if match:
-                            item_title = item_title or match.get("title", "")
-                            access_link = match.get("joinLink", "")
-                    else:
-                        match = None
-
-            # Resolve slot details for bookings
-            slot_date, slot_time = "", ""
-            if purchase_type == "booking":
-                if content:
-                    slot = next((s for s in (content.get("slots") or []) if isinstance(s, dict) and s.get("id") == ref_id), None)
-                    if slot:
-                        slot_date = slot.get("date", "")
-                        slot_time = slot.get("time", "")
-                item_title = item_title or "1:1 Career Clarity Consultation"
-
-            purchase = {
-                "purchase_id": f"pur_{uuid.uuid4().hex[:12]}",
+        # For courses/lectures: prevent duplicate purchase
+        if purchase_type in ("enrollment", "registration"):
+            existing = await db.purchases.find_one({
                 "user_id": user["user_id"],
-                "email": user.get("email", (payment_doc or {}).get("email", "")),
-                "name": user.get("name", (payment_doc or {}).get("name", "")),
-                "type": purchase_type,
                 "item_id": ref_id,
-                "item_title": item_title,
-                "access_link": access_link,
-                "phone": (payment_doc or {}).get("phone", ""),
-                "amount": ((payment_doc or {}).get("amount", 0)) / 100,  # paise → rupees
-                "payment_id": req.razorpay_payment_id,
-                "order_id": req.razorpay_order_id,
-                "goal": "",
-                "slot_date": slot_date,
-                "slot_time": slot_time,
-                "status": "confirmed",
-                "extra": {},
-                "created_at": paid_at,
-            }
-            await db.purchases.insert_one(purchase)
-            purchase.pop("_id", None)
+                "type": purchase_type,
+                "status": {"$ne": "cancelled"},
+            })
+            if existing:
+                return {"verified": True, "purchase": None}
+
+        # Resolve item title and access link from site_content
+        item_title = (payment_doc or {}).get("label") or ""
+        access_link = ""
+        content = await db.site_content.find_one({"_id": "singleton"})
+        if content:
+            if purchase_type == "enrollment":
+                match = next((c for c in (content.get("courses") or []) if isinstance(c, dict) and c.get("id") == ref_id), None)
+                if match:
+                    item_title = item_title or match.get("title", "")
+                    access_link = match.get("link", "")
+            elif purchase_type == "registration":
+                match = next((l for l in (content.get("lectures") or []) if isinstance(l, dict) and l.get("id") == ref_id), None)
+                if match:
+                    item_title = item_title or match.get("title", "")
+                    access_link = match.get("joinLink", "")
+
+        # --- Consultation slot booking ---
+        slot_date = (payment_doc or {}).get("slot_date") or ""
+        slot_time = (payment_doc or {}).get("slot_time") or ""
+        slot_duration = (payment_doc or {}).get("slot_duration") or 30
+        if purchase_type == "booking":
+            item_title = item_title or "1:1 Career Clarity Consultation"
+            # Resolve consultation form URL as access_link
+            settings = (content or {}).get("settings") or {}
+            access_link = settings.get("consultationFormUrl") or "https://forms.gle/SdUuf9npWgMxzNpj8"
+            # Book the slot(s) atomically
+            if slot_date and slot_time:
+                slots_to_book = [slot_time]
+                if slot_duration == 60:
+                    h, m = map(int, slot_time.split(":"))
+                    m2 = m + 30
+                    h2 = h + m2 // 60
+                    m2 = m2 % 60
+                    slots_to_book.append(f"{h2:02d}:{m2:02d}")
+                try:
+                    for st in slots_to_book:
+                        await db.booked_slots.insert_one({
+                            "date": slot_date,
+                            "time": st,
+                            "user_id": user["user_id"],
+                            "consultation_type": ref_id,
+                            "payment_id": req.razorpay_payment_id,
+                            "order_id": req.razorpay_order_id,
+                            "created_at": paid_at,
+                        })
+                except DuplicateKeyError:
+                    logger.warning(f"Slot conflict: {slot_date} {slot_time} already booked (payment {req.razorpay_payment_id})")
+
+        purchase = {
+            "purchase_id": f"pur_{uuid.uuid4().hex[:12]}",
+            "user_id": user["user_id"],
+            "email": user.get("email", (payment_doc or {}).get("email", "")),
+            "name": user.get("name", (payment_doc or {}).get("name", "")),
+            "type": purchase_type,
+            "item_id": ref_id,
+            "item_title": item_title,
+            "access_link": access_link,
+            "phone": (payment_doc or {}).get("phone", ""),
+            "amount": ((payment_doc or {}).get("amount", 0)) / 100,  # paise → rupees
+            "payment_id": req.razorpay_payment_id,
+            "order_id": req.razorpay_order_id,
+            "goal": "",
+            "slot_date": slot_date,
+            "slot_time": slot_time,
+            "slot_duration": slot_duration,
+            "status": "confirmed",
+            "extra": {},
+            "created_at": paid_at,
+        }
+        await db.purchases.insert_one(purchase)
+        purchase.pop("_id", None)
 
     return {"verified": True, "purchase": purchase}
 
@@ -736,11 +765,15 @@ async def admin_cancel_purchase(purchase_id: str, request: Request):
     if not res.matched_count:
         raise HTTPException(status_code=404, detail="Purchase not found.")
     doc = await db.purchases.find_one({"purchase_id": purchase_id}, {"_id": 0})
-    if doc and doc.get("type") == "booking" and doc.get("item_id"):
-        try:
-            await _set_slot_booked(doc["item_id"], False)
-        except Exception:
-            pass
+    if doc and doc.get("type") == "booking":
+        # Release booked_slots
+        await _release_consultation_slots(doc)
+        # Also release legacy slot if applicable
+        if doc.get("item_id"):
+            try:
+                await _set_slot_booked(doc["item_id"], False)
+            except Exception:
+                pass
     return {"ok": True}
 
 
@@ -755,14 +788,71 @@ async def cancel_purchase(purchase_id: str, request: Request):
     )
     if not res.matched_count:
         raise HTTPException(status_code=404, detail="Purchase not found.")
-    # Release the slot if it was a booking
     doc = await db.purchases.find_one({"purchase_id": purchase_id}, {"_id": 0})
-    if doc and doc.get("type") == "booking" and doc.get("item_id"):
-        try:
-            await _set_slot_booked(doc["item_id"], False)
-        except Exception:
-            pass
+    if doc and doc.get("type") == "booking":
+        await _release_consultation_slots(doc)
+        if doc.get("item_id"):
+            try:
+                await _set_slot_booked(doc["item_id"], False)
+            except Exception:
+                pass
     return {"ok": True}
+
+
+async def _release_consultation_slots(purchase_doc):
+    """Remove booked_slots entries for a cancelled consultation purchase."""
+    sd = purchase_doc.get("slot_date")
+    st = purchase_doc.get("slot_time")
+    pid = purchase_doc.get("payment_id")
+    if sd and st and pid:
+        await db.booked_slots.delete_many({"payment_id": pid})
+
+
+# ---------- All 30-min base slots between 2 PM and 5 PM ----------
+_BASE_SLOTS = ["14:00", "14:30", "15:00", "15:30", "16:00", "16:30"]
+
+
+@api_router.get("/consultation-slots")
+async def get_consultation_slots(date: str, duration: int = 30):
+    """Return available consultation time slots for a given date."""
+    # Validate date format
+    try:
+        dt = datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
+
+    # Validate day is Mon(0)–Thu(3)
+    if dt.weekday() > 3:
+        raise HTTPException(status_code=400, detail="Consultations are available only Monday to Thursday.")
+
+    # Validate within next 7 days
+    today = datetime.now(timezone.utc).date()
+    target = dt.date()
+    if target <= today or (target - today).days > 7:
+        raise HTTPException(status_code=400, detail="Please select a date within the next 7 days.")
+
+    # Fetch all booked 30-min slots for this date
+    booked_cursor = db.booked_slots.find({"date": date}, {"time": 1, "_id": 0})
+    booked_set = {doc["time"] async for doc in booked_cursor}
+
+    if duration == 60:
+        # For 60-min: return start times where both consecutive 30-min slots are free
+        slots = []
+        for i in range(len(_BASE_SLOTS) - 1):
+            s1 = _BASE_SLOTS[i]
+            s2 = _BASE_SLOTS[i + 1]
+            available = s1 not in booked_set and s2 not in booked_set
+            slots.append({"time": s1, "end": s2.split(":")[0] + ":" + str(int(s2.split(":")[1]) + 30).zfill(2) if int(s2.split(":")[1]) + 30 < 60 else str(int(s2.split(":")[0]) + 1).zfill(2) + ":00", "available": available})
+        # Compute correct end times
+        for s in slots:
+            h, m = map(int, s["time"].split(":"))
+            eh, em = h + 1, m
+            s["end"] = f"{eh:02d}:{em:02d}"
+    else:
+        # For 30-min: each base slot individually
+        slots = [{"time": t, "available": t not in booked_set} for t in _BASE_SLOTS]
+
+    return {"date": date, "duration": duration, "slots": slots}
 
 
 # Include the router in the main app
@@ -786,6 +876,7 @@ logger = logging.getLogger(__name__)
 @app.on_event("startup")
 async def ensure_user_email_index():
     await db.users.create_index("email", unique=True)
+    await db.booked_slots.create_index([("date", 1), ("time", 1)], unique=True)
 
 
 @app.on_event("shutdown")

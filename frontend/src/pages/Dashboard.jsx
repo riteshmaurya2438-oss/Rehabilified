@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ArrowRight, Loader2, Video } from 'lucide-react';
+import { ArrowRight, ExternalLink, Loader2, Video } from 'lucide-react';
 import { useDB, useSession, fetchPurchases, cancelPurchaseOnServer } from '../lib/store';
 import { useUI } from '../lib/ui';
 import { fmtDate, fmtTime, inr } from '../lib/format';
@@ -126,18 +126,25 @@ export function Dashboard() {
                   <p className="mt-1 text-sm text-navy/60">{b.slot_date ? `${fmtDate(b.slot_date)} \u00b7 ${fmtTime(b.slot_time)} IST` : 'Slot details unavailable'} &middot; {inr(b.amount)}</p>
                   <span className={cn('mt-2 inline-block rounded-full px-3 py-1 text-xs font-bold', b.status === 'confirmed' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700')}>{b.status}</span>
                 </div>
-                {b.status === 'confirmed' && (
-                  <button className="btn btn-outline shrink-0" data-testid="cancel-booking" onClick={async () => {
-                    if (!window.confirm('Cancel this booking? The slot will be released.')) return;
-                    const ok = await cancelPurchaseOnServer(b.purchase_id);
-                    if (ok) {
-                      toast.success('Booking cancelled. Contact us on WhatsApp for any refund.');
-                      loadPurchases();
-                    } else {
-                      toast.error('Could not cancel. Please try again.');
-                    }
-                  }}>Cancel</button>
-                )}
+                <div className="flex shrink-0 flex-col gap-2 sm:items-end">
+                  {b.access_link && b.status === 'confirmed' && (
+                    <a href={b.access_link} target="_blank" rel="noopener noreferrer" className="btn btn-primary" data-testid="consultation-registration-link">
+                      <ExternalLink className="h-4 w-4" /> Registration Form
+                    </a>
+                  )}
+                  {b.status === 'confirmed' && (
+                    <button className="btn btn-outline" data-testid="cancel-booking" onClick={async () => {
+                      if (!window.confirm('Cancel this booking? The slot will be released.')) return;
+                      const ok = await cancelPurchaseOnServer(b.purchase_id);
+                      if (ok) {
+                        toast.success('Booking cancelled. Contact us on WhatsApp for any refund.');
+                        loadPurchases();
+                      } else {
+                        toast.error('Could not cancel. Please try again.');
+                      }
+                    }}>Cancel</button>
+                  )}
+                </div>
               </div>
             )))}
           </div>

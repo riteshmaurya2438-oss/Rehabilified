@@ -46,7 +46,7 @@ async function liveCheckout(req) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
-    body: JSON.stringify({ amount: req.amount, currency: 'INR', kind: req.kind, refId: req.refId, label: req.label, email: req.email, name: req.name, phone: req.phone }),
+    body: JSON.stringify({ amount: req.amount, currency: 'INR', kind: req.kind, refId: req.refId, label: req.label, email: req.email, name: req.name, phone: req.phone, slot_date: req.slot_date || null, slot_time: req.slot_time || null, slot_duration: req.slot_duration || null }),
   });
   if (res.status === 409) {
     const err = await res.json();
