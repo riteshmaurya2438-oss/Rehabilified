@@ -1,0 +1,2 @@
+{"ts": "2026-10-11T13:43:51", "name": "homepage-render-check", "mode": "ran-inline", "url": "https://site-builder-4997.preview.emergentagent.com", "passed": false, "total_ms": 26}
+{"ts": "2026-10-11T13:44:06", "name": "homepage-render-check2", "mode": "ran-inline", "url": "https://site-builder-4997.preview.emergentagent.com", "passed": false, "total_ms": 876, "pw_import_ms": 394, "launch_ms": null, "first_goto_ms": null, "body_ms": null, "body_gotos": []}

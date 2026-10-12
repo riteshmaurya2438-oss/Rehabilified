@@ -283,6 +283,9 @@ export function ConsultationSection() {
           <p className="mt-4 text-base leading-relaxed text-navy/65 sm:text-lg">
             Get personalised career clarity from an experienced physiotherapist and educator &mdash; a private 1:1 video consultation with Dr. Sayyeda Uneza Fatima.
           </p>
+          <p className="mt-3 text-sm font-semibold text-royal sm:text-base">
+            Slots are available only on Monday to Thursday from 2-5 pm.
+          </p>
           <p className="mx-auto mt-5 max-w-2xl rounded-2xl bg-white/70 p-4 text-sm leading-relaxed text-navy/65 shadow-sm">
             <strong className="text-navy">BPT</strong> is a Bachelor of Physiotherapy and <strong className="text-navy">MPT</strong> is a Master of Physiotherapy. MPT is a postgraduate option &mdash; it is <em>not</em> automatically compulsory for every physiotherapist. This session helps you decide what genuinely fits your goals.
           </p>
