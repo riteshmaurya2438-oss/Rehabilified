@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, Info } from 'lucide-react';
 import { Modal } from './ui';
 import { recordFreePurchase, useDB, useSession } from '../lib/store';
 import { useUI } from '../lib/ui';

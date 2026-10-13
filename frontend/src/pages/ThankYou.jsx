@@ -20,7 +20,7 @@ export function ThankYou() {
   const slots = useDB((s) => s.slots);
 
   const [serverPurchase, setServerPurchase] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(() => Boolean(id && id.startsWith('pur_')));
 
   // Fetch server purchase if id looks like a purchase_id (pur_xxx)
   useEffect(() => {
@@ -71,7 +71,7 @@ export function ThankYou() {
         detail = `${fmtDate(serverPurchase.slot_date)} \u00b7 ${fmtTime(serverPurchase.slot_time)} IST \u00b7 Video call`;
       }
     }
-  } else if (!loading) {
+  } else if (!loading && !(id && id.startsWith('pur_'))) {
     // Fallback to local Zustand state (for free items or legacy IDs)
     if (type === 'lecture') {
       const r = registrations.find((x) => x.id === id);
