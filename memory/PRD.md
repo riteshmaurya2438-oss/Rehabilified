@@ -4,14 +4,15 @@
 Clone a React + Vite + Tailwind frontend-only website ("Rehabilified" by Dr. Sayyeda Uneza Fatima) and extend it into a fully functional full-stack application with FastAPI + MongoDB backend, live Razorpay payments, Google Sign-in for the student dashboard, and server-backed global syncing of admin edits.
 
 ## Architecture
-- **Frontend**: React CRA + Tailwind CSS v3 + Zustand + Framer Motion + React Router
+- **Frontend**: React CRA + Tailwind CSS v3 + Zustand + Framer Motion + React Router (HashRouter)
 - **Backend**: FastAPI + Motor (async MongoDB) + Razorpay SDK
 - **Database**: MongoDB (local preview, production on user's VPS)
 - **Auth**: Custom Google OAuth for students; password-based for admin
+- **Custom Domain**: rehabilified.com
 
 ## Core Features — Completed
 - [x] Brand logo in navbar, footer, splash screen
-- [x] Website favicon (Rehabilified logo)
+- [x] Website favicon with cache-busting (?v=2) + manifest.json — Oct 16, 2026
 - [x] Premium masonry image gallery with lightbox
 - [x] Hero section with 3 CTA buttons (Appointments, Lectures, Consultations)
 - [x] Course thumbnail image upload in Admin panel
@@ -23,20 +24,15 @@ Clone a React + Vite + Tailwind frontend-only website ("Rehabilified" by Dr. Say
 - [x] Course "parts" data structure in store and Admin panel
 - [x] Deep-link standalone pages for courses, lectures, consultations
 - [x] Consultation slot availability text: "Monday to Thursday from 2-5 pm"
-- [x] Consultation slot booking system (date → time → pay → lock in DB) — Oct 12, 2026
-- [x] Registration Form link in student dashboard for consultation bookings — Oct 14, 2026
+- [x] Consultation slot booking system (date → time → pay → lock in DB)
+- [x] Registration Form link in student dashboard for consultation bookings
 - [x] `booked_slots` collection with unique index to prevent double-booking
+- [x] Shareable consultation link with Share + Copy buttons — Oct 16, 2026
 
 ## Google OAuth Configuration
 - Client ID: 351024347825-ufqia77j36934sp1uupdg32ip5stmv80.apps.googleusercontent.com
-- Authorized JavaScript Origins:
-  - https://site-builder-4997.preview.emergentagent.com
-  - https://rehabilified.com
-  - https://www.rehabilified.com
-- Authorized Redirect URIs:
-  - https://site-builder-4997.preview.emergentagent.com/api/auth/google/callback
-  - https://rehabilified.com/api/auth/google/callback
-  - https://www.rehabilified.com/api/auth/google/callback
+- Authorized JavaScript Origins: preview URL, rehabilified.com, www.rehabilified.com
+- Authorized Redirect URIs: {origin}/api/auth/google/callback for each origin
 
 ## Key DB Schema
 - `site_content`: {content_data, stats, testimonials, slots, courses, settings}
@@ -48,23 +44,12 @@ Clone a React + Vite + Tailwind frontend-only website ("Rehabilified" by Dr. Say
 - `users`: {user_id, email, name, picture}
 - `user_sessions`: {session_token, user_id, expires_at}
 
-## Key API Endpoints
-- `POST /api/verify-payment` — Razorpay HMAC verification + auto-create purchase + book slots
-- `GET /api/purchases` — Fetch authenticated user's purchases
-- `GET/PUT /api/content` — Global site content sync
-- `GET /api/consultation-slots?date=YYYY-MM-DD&duration=30|60` — Available time slots
-- `GET /api/auth/google/login` — Initiates Google OAuth flow
-- `GET /api/auth/google/callback` — Handles Google OAuth callback
-- `GET /api/auth/me` — Returns current user
-- `POST /api/auth/logout` — Logs out user
-
 ## Backlog (Prioritized)
 ### P0
-- Verify deep-link pages end-to-end (CoursePage, LecturePage, ConsultationPage)
+- Admin panel: show booked consultation slots / schedule view
 
 ### P1
 - Oracle Cloud Free VPS deployment guide (markdown)
-- Admin panel: show booked consultation slots / schedule view
 
 ### P2
 - Admin session timeout adjustment (extend to 24h instead of lockout-on-exit)
