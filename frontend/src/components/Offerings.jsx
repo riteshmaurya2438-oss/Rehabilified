@@ -221,28 +221,46 @@ const CONSULT_TOPICS = [
 const ccEmailOk = (e) => /^\S+@\S+\.\S+$/.test(e.trim());
 const ccPhoneOk = (p) => p.replace(/\D/g, '').length >= 10;
 
-/** Compute Mon–Thu dates within the next 7 days */
-function getAvailableDates() {
+/** Compute available dates within the next 7 days based on slot config */
+function getAvailableDates(allowedDays) {
+  // allowedDays is an array of Python weekdays: 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun
+  // JS getDay(): 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
+  // Convert Python weekday to JS: pyDay -> (pyDay + 1) % 7
+  const jsAllowed = (allowedDays || [0, 1, 2, 3]).map(d => (d + 1) % 7);
   const dates = [];
   const today = new Date();
   for (let d = 1; d <= 7; d++) {
     const day = addDays(today, d);
-    const dow = day.getDay(); // 0=Sun … 4=Thu
-    if (dow >= 1 && dow <= 4) {
+    const dow = day.getDay();
+    if (jsAllowed.includes(dow)) {
       dates.push({ date: format(day, 'yyyy-MM-dd'), label: format(day, 'EEE, d MMM'), dayName: format(day, 'EEEE') });
     }
   }
   return dates;
 }
 
+const DAY_NAMES_FULL = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+function slotAvailabilityText(cfg) {
+  const days = (cfg?.days || [0, 1, 2, 3]).sort();
+  const names = days.map(d => DAY_NAMES_FULL[d]);
+  const dayStr = names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] : names[0] || '';
+  const sh = cfg?.startHour ?? 14;
+  const eh = cfg?.endHour ?? 17;
+  const fh = (h) => `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}`;
+  return `Slots are available only on ${dayStr} from ${fh(sh)} to ${fh(eh)}.`;
+}
+
 export function ConsultationSection() {
   const addPayment = useDB((s) => s.addPayment);
   const consultOptions = useConsultOptions();
   const regFormUrl = useFormUrl();
+  const settings = useDB((s) => s.settings);
+  const slotCfg = useMemo(() => settings.consultationSlots || { days: [0, 1, 2, 3], startHour: 14, endHour: 17 }, [settings.consultationSlots]);
 
   // Modal state
-  const [chosen, setChosen] = useState(null);        // selected consultation option
-  const [step, setStep] = useState('date');           // date | time | form | success | failed
+  const [chosen, setChosen] = useState(null);
+  const [step, setStep] = useState('date');
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedTime, setSelectedTime] = useState(null);
   const [slots, setSlots] = useState([]);
@@ -255,7 +273,8 @@ export function ConsultationSection() {
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const availableDates = useMemo(getAvailableDates, []);
+  const availableDates = useMemo(() => getAvailableDates(slotCfg.days), [slotCfg.days]);
+  const availabilityText = useMemo(() => slotAvailabilityText(slotCfg), [slotCfg]);
 
   function book(option) {
     setChosen(option);
@@ -359,7 +378,7 @@ export function ConsultationSection() {
             Get personalised career clarity from an experienced physiotherapist and educator &mdash; a private 1:1 video consultation with Dr. Sayyeda Uneza Fatima.
           </p>
           <p className="mt-3 text-sm font-semibold text-royal sm:text-base">
-            Slots are available only on Monday to Thursday from 2-5 pm.
+            {availabilityText}
           </p>
           <p className="mx-auto mt-5 max-w-2xl rounded-2xl bg-white/70 p-4 text-sm leading-relaxed text-navy/65 shadow-sm">
             <strong className="text-navy">BPT</strong> is a Bachelor of Physiotherapy and <strong className="text-navy">MPT</strong> is a Master of Physiotherapy. MPT is a postgraduate option &mdash; it is <em>not</em> automatically compulsory for every physiotherapist. This session helps you decide what genuinely fits your goals.
@@ -435,7 +454,7 @@ export function ConsultationSection() {
             {/* Step: Date */}
             {step === 'date' && (
               <div data-testid="slot-date-picker">
-                <p className="mb-3 text-sm text-navy/60">Choose a day for your consultation (Monday – Thursday, next 7 days):</p>
+                <p className="mb-3 text-sm text-navy/60">Choose a day for your consultation ({availabilityText.replace('Slots are available only on ', '').replace('.', '')}):</p>
                 {availableDates.length === 0 ? (
                   <p className="rounded-xl bg-amber-50 p-4 text-center text-sm text-amber-800">No available dates in the next 7 days. Please check back later.</p>
                 ) : (

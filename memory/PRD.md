@@ -12,7 +12,7 @@ Clone a React + Vite + Tailwind frontend-only website ("Rehabilified" by Dr. Say
 
 ## Core Features — Completed
 - [x] Brand logo in navbar, footer, splash screen
-- [x] Website favicon with cache-busting (?v=2) + manifest.json — Oct 16, 2026
+- [x] Website favicon with cache-busting (?v=2) + manifest.json
 - [x] Premium masonry image gallery with lightbox
 - [x] Hero section with 3 CTA buttons (Appointments, Lectures, Consultations)
 - [x] Course thumbnail image upload in Admin panel
@@ -20,14 +20,15 @@ Clone a React + Vite + Tailwind frontend-only website ("Rehabilified" by Dr. Say
 - [x] Course checkout bug fix (lesson count crash)
 - [x] Student purchases (courses, lectures, consultations) stored in MongoDB
 - [x] `access_link` / `joinLink` validation in Admin; links returned on Razorpay verify
-- [x] Custom Google OAuth (user's own credentials, no Emergent branding) — Oct 16, 2026
+- [x] Custom Google OAuth (user's own credentials, no Emergent branding)
 - [x] Course "parts" data structure in store and Admin panel
 - [x] Deep-link standalone pages for courses, lectures, consultations
-- [x] Consultation slot availability text: "Monday to Thursday from 2-5 pm"
 - [x] Consultation slot booking system (date → time → pay → lock in DB)
 - [x] Registration Form link in student dashboard for consultation bookings
 - [x] `booked_slots` collection with unique index to prevent double-booking
-- [x] Shareable consultation link with Share + Copy buttons — Oct 16, 2026
+- [x] Shareable consultation page with Share + Copy buttons
+- [x] **Dynamic consultation schedule in admin** — toggle days (Mon-Sun), set start/end time, auto-updates frontend — Oct 16, 2026
+- [x] Navbar "1:1 Consultation" links to standalone consultation page
 
 ## Google OAuth Configuration
 - Client ID: 351024347825-ufqia77j36934sp1uupdg32ip5stmv80.apps.googleusercontent.com
@@ -36,6 +37,7 @@ Clone a React + Vite + Tailwind frontend-only website ("Rehabilified" by Dr. Say
 
 ## Key DB Schema
 - `site_content`: {content_data, stats, testimonials, slots, courses, settings}
+  - `settings.consultationSlots`: {days: [0,1,2,3], startHour: 14, endHour: 17, slotMinutes: 30}
 - `admin_auth`: {_id: 'admin', hash, token, recoveryCode}
 - `admin_sessions`: {_id, token, created}
 - `orders`: {_id, amount, currency, status, user_info}
@@ -43,6 +45,17 @@ Clone a React + Vite + Tailwind frontend-only website ("Rehabilified" by Dr. Say
 - `booked_slots`: {date, time, user_id, consultation_type, payment_id, order_id} — unique index on (date, time)
 - `users`: {user_id, email, name, picture}
 - `user_sessions`: {session_token, user_id, expires_at}
+
+## Key API Endpoints
+- `POST /api/verify-payment` — Razorpay HMAC verification + auto-create purchase + book slots
+- `GET /api/purchases` — Fetch authenticated user's purchases
+- `GET/PUT /api/content` — Global site content sync
+- `GET /api/consultation-slots?date=&duration=` — Available time slots (dynamic from DB config)
+- `GET /api/consultation-config` — Returns current slot configuration (days, hours, display text)
+- `GET /api/auth/google/login` — Initiates Google OAuth flow
+- `GET /api/auth/google/callback` — Handles Google OAuth callback
+- `GET /api/auth/me` — Returns current user
+- `POST /api/auth/logout` — Logs out user
 
 ## Backlog (Prioritized)
 ### P0

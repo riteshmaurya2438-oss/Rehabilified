@@ -1,0 +1,91 @@
+{
+  "summary": "Comprehensive testing of dynamic consultation schedule settings feature. All backend API tests passed (13/13). All frontend UI tests passed. The new admin panel consultation schedule section works correctly with day toggles, time dropdowns, and live preview text.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_consultation_schedule.py",
+    "/app/test_reports/pytest/consultation_schedule_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_consultation_schedule.py"
+  ],
+  "success_rate": {
+    "backend": "100% (13/13 tests passed)",
+    "frontend": "100% (all UI tests passed)"
+  },
+  "test_credentials": {
+    "admin_password": "TestAdmin@1234",
+    "admin_setup_code": "RB-SUF2025REHAB"
+  },
+  "seed_data_creation": "None - used existing data",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Dynamic consultation schedule feature fully tested. Admin panel 'Homepage numbers' tab has 'Consultation Schedule' section with day toggles (data-testid='slot-day-0' through 'slot-day-6'), start/end time dropdowns (data-testid='slot-start-hour', 'slot-end-hour'), and preview text (data-testid='slot-preview-text'). Backend APIs: GET /api/consultation-config returns config with days, startHour, endHour, displayText. GET /api/consultation-slots?date=YYYY-MM-DD&duration=30|60 returns available slots based on saved config. Weekend dates are rejected with 400 if not in allowed days. Frontend consultation section shows dynamic availability text matching admin settings. Date picker in booking modal shows only dates matching admin-configured days.",
+  "features_tested": {
+    "admin_consultation_schedule_section": {
+      "status": "PASS",
+      "details": "Consultation Schedule section visible in Homepage numbers tab with day toggles, time dropdowns, and preview text"
+    },
+    "admin_day_toggle_buttons": {
+      "status": "PASS",
+      "details": "Day toggle buttons (Mon-Sun) work correctly. Toggling Friday adds/removes it from preview text immediately"
+    },
+    "admin_start_time_dropdown": {
+      "status": "PASS",
+      "details": "Start time dropdown (data-testid='slot-start-hour') updates preview text immediately when changed"
+    },
+    "admin_end_time_dropdown": {
+      "status": "PASS",
+      "details": "End time dropdown (data-testid='slot-end-hour') updates preview text immediately when changed"
+    },
+    "admin_preview_text": {
+      "status": "PASS",
+      "details": "Preview text (data-testid='slot-preview-text') shows 'Slots are available only on Monday, Tuesday, Wednesday and Thursday from 2 PM to 5 PM.' and updates dynamically"
+    },
+    "admin_save_settings": {
+      "status": "PASS",
+      "details": "Save settings button persists consultation schedule to database (verified via API)"
+    },
+    "api_consultation_config": {
+      "status": "PASS",
+      "details": "GET /api/consultation-config returns days, dayNames, startHour, endHour, slotMinutes, displayText"
+    },
+    "api_consultation_slots_valid_date": {
+      "status": "PASS",
+      "details": "GET /api/consultation-slots with valid Mon-Thu date returns slots for 30-min and 60-min durations"
+    },
+    "api_consultation_slots_weekend_rejected": {
+      "status": "PASS",
+      "details": "GET /api/consultation-slots with weekend date returns 400 error when weekends not in allowed days"
+    },
+    "frontend_consultation_availability_text": {
+      "status": "PASS",
+      "details": "Consultation section shows dynamic availability text: 'Slots are available only on Monday, Tuesday, Wednesday and Thursday from 2 PM to 5 PM.'"
+    },
+    "frontend_booking_modal_date_picker": {
+      "status": "PASS",
+      "details": "Booking modal date picker shows only Mon-Thu dates (Monday 19 Oct, Tuesday 20 Oct, Wednesday 21 Oct, Thursday 22 Oct)"
+    },
+    "consultation_page_share_copy_buttons": {
+      "status": "PASS",
+      "details": "/#/consultation page has Share and Copy link buttons with correct data-testids"
+    },
+    "favicon_cache_busting": {
+      "status": "PASS",
+      "details": "4 favicon links found with ?v=2 cache-busting parameter"
+    },
+    "manifest_json": {
+      "status": "PASS",
+      "details": "manifest.json loads correctly with 'Rehabilified' name and icons array"
+    }
+  }
+}

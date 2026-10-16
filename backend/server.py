@@ -892,22 +892,68 @@ async def _release_consultation_slots(purchase_doc):
         await db.booked_slots.delete_many({"payment_id": pid})
 
 
-# ---------- All 30-min base slots between 2 PM and 5 PM ----------
-_BASE_SLOTS = ["14:00", "14:30", "15:00", "15:30", "16:00", "16:30"]
+# ---------- Dynamic consultation slot configuration ----------
+_DEFAULT_SLOT_CONFIG = {
+    "days": [0, 1, 2, 3],          # 0=Mon, 1=Tue, 2=Wed, 3=Thu (Python weekday)
+    "startHour": 14,                # 2 PM
+    "endHour": 17,                  # 5 PM
+    "slotMinutes": 30,              # 30-min base slot
+}
+
+# Day name mapping for error messages
+_DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+
+async def _get_slot_config():
+    """Read consultation slot config from DB settings, with defaults."""
+    content = await db.site_content.find_one({"_id": "singleton"}, {"settings.consultationSlots": 1})
+    cfg = ((content or {}).get("settings") or {}).get("consultationSlots")
+    if not cfg or not isinstance(cfg, dict):
+        return _DEFAULT_SLOT_CONFIG
+    return {
+        "days": cfg.get("days", _DEFAULT_SLOT_CONFIG["days"]),
+        "startHour": cfg.get("startHour", _DEFAULT_SLOT_CONFIG["startHour"]),
+        "endHour": cfg.get("endHour", _DEFAULT_SLOT_CONFIG["endHour"]),
+        "slotMinutes": cfg.get("slotMinutes", _DEFAULT_SLOT_CONFIG["slotMinutes"]),
+    }
+
+
+def _generate_base_slots(start_hour, end_hour, slot_minutes):
+    """Generate all 30-min slot times between start_hour and end_hour."""
+    slots = []
+    h, m = start_hour, 0
+    while h < end_hour or (h == end_hour and m == 0):
+        t = f"{h:02d}:{m:02d}"
+        # Don't add the end boundary as a slot start (e.g., 17:00 for a 5pm end)
+        next_m = m + slot_minutes
+        next_h = h + next_m // 60
+        next_m = next_m % 60
+        if next_h > end_hour or (next_h == end_hour and next_m > 0):
+            break
+        slots.append(t)
+        m += slot_minutes
+        h += m // 60
+        m = m % 60
+    return slots
 
 
 @api_router.get("/consultation-slots")
 async def get_consultation_slots(date: str, duration: int = 30):
     """Return available consultation time slots for a given date."""
+    cfg = await _get_slot_config()
+    allowed_days = cfg["days"]
+    base_slots = _generate_base_slots(cfg["startHour"], cfg["endHour"], cfg["slotMinutes"])
+
     # Validate date format
     try:
         dt = datetime.strptime(date, "%Y-%m-%d")
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
 
-    # Validate day is Mon(0)–Thu(3)
-    if dt.weekday() > 3:
-        raise HTTPException(status_code=400, detail="Consultations are available only Monday to Thursday.")
+    # Validate day is in allowed days
+    if dt.weekday() not in allowed_days:
+        day_names = ", ".join(_DAY_NAMES[d] for d in sorted(allowed_days))
+        raise HTTPException(status_code=400, detail=f"Consultations are available only on {day_names}.")
 
     # Validate within next 7 days
     today = datetime.now(timezone.utc).date()
@@ -922,21 +968,42 @@ async def get_consultation_slots(date: str, duration: int = 30):
     if duration == 60:
         # For 60-min: return start times where both consecutive 30-min slots are free
         slots = []
-        for i in range(len(_BASE_SLOTS) - 1):
-            s1 = _BASE_SLOTS[i]
-            s2 = _BASE_SLOTS[i + 1]
+        for i in range(len(base_slots) - 1):
+            s1 = base_slots[i]
+            s2 = base_slots[i + 1]
             available = s1 not in booked_set and s2 not in booked_set
-            slots.append({"time": s1, "end": s2.split(":")[0] + ":" + str(int(s2.split(":")[1]) + 30).zfill(2) if int(s2.split(":")[1]) + 30 < 60 else str(int(s2.split(":")[0]) + 1).zfill(2) + ":00", "available": available})
-        # Compute correct end times
-        for s in slots:
-            h, m = map(int, s["time"].split(":"))
-            eh, em = h + 1, m
-            s["end"] = f"{eh:02d}:{em:02d}"
+            h, m = map(int, s1.split(":"))
+            slots.append({"time": s1, "end": f"{h + 1:02d}:{m:02d}", "available": available})
     else:
         # For 30-min: each base slot individually
-        slots = [{"time": t, "available": t not in booked_set} for t in _BASE_SLOTS]
+        slots = [{"time": t, "available": t not in booked_set} for t in base_slots]
 
-    return {"date": date, "duration": duration, "slots": slots}
+    return {"date": date, "duration": duration, "slots": slots, "config": {"days": cfg["days"], "startHour": cfg["startHour"], "endHour": cfg["endHour"]}}
+
+
+@api_router.get("/consultation-config")
+async def get_consultation_config():
+    """Return current consultation slot configuration."""
+    cfg = await _get_slot_config()
+    day_names = [_DAY_NAMES[d] for d in sorted(cfg["days"])]
+    sh = cfg["startHour"]
+    eh = cfg["endHour"]
+    start_label = f"{sh % 12 or 12} {'AM' if sh < 12 else 'PM'}"
+    end_label = f"{eh % 12 or 12} {'AM' if eh < 12 else 'PM'}"
+    nbsp = "\u00a0"
+    if len(day_names) > 1:
+        day_str = ", ".join(day_names[:-1]) + " and " + day_names[-1]
+    else:
+        day_str = day_names[0] if day_names else "—"
+    display_text = f"Slots are available only on {day_str} from {start_label.replace(' ', nbsp)} to {end_label.replace(' ', nbsp)}."
+    return {
+        "days": cfg["days"],
+        "dayNames": day_names,
+        "startHour": sh,
+        "endHour": eh,
+        "slotMinutes": cfg["slotMinutes"],
+        "displayText": display_text,
+    }
 
 
 # Include the router in the main app

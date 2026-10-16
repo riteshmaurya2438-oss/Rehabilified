@@ -486,6 +486,35 @@ export function HomepageTab() {
   const [formUrl, setFormUrl] = useState(settings.consultationFormUrl || '');
   const [wa, setWa] = useState(settings.whatsapp);
   const [ig, setIg] = useState(settings.instagram);
+
+  // Consultation schedule settings
+  const defaultSlotCfg = { days: [0, 1, 2, 3], startHour: 14, endHour: 17 };
+  const slotCfg = settings.consultationSlots || defaultSlotCfg;
+  const [slotDays, setSlotDays] = useState(slotCfg.days || defaultSlotCfg.days);
+  const [slotStart, setSlotStart] = useState(slotCfg.startHour ?? 14);
+  const [slotEnd, setSlotEnd] = useState(slotCfg.endHour ?? 17);
+
+  const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const dayFull = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const hours = Array.from({ length: 16 }, (_, i) => i + 6); // 6 AM to 9 PM
+
+  function toggleDay(d) {
+    setSlotDays((prev) => prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d].sort());
+  }
+
+  function fmtHour(h) {
+    const hr = h % 12 || 12;
+    const ampm = h < 12 ? 'AM' : 'PM';
+    return `${hr} ${ampm}`;
+  }
+
+  function slotPreviewText() {
+    const sorted = [...slotDays].sort();
+    if (sorted.length === 0) return 'No days selected.';
+    const names = sorted.map((d) => dayFull[d]);
+    const dayStr = names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] : names[0];
+    return `Slots are available only on ${dayStr} from ${fmtHour(slotStart)} to ${fmtHour(slotEnd)}.`;
+  }
   return (
     <div className="space-y-10">
       <div>
@@ -533,6 +562,43 @@ export function HomepageTab() {
             </div>
           </div>
           <div>
+            <h3 className="text-sm font-bold uppercase tracking-wide text-navy/50">Consultation schedule</h3>
+            <p className="mt-1 text-xs text-navy/40">Choose which days and time window students can book 1:1 consultations.</p>
+            <div className="mt-3">
+              <label className="label">Available days</label>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {dayLabels.map((label, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    data-testid={`slot-day-${i}`}
+                    onClick={() => toggleDay(i)}
+                    className={`rounded-lg border-2 px-4 py-2 text-sm font-semibold transition ${slotDays.includes(i) ? 'border-royal bg-royal text-white' : 'border-navy/15 bg-white text-navy/60 hover:border-royal/50'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="label">Start time</label>
+                <select className="field" value={slotStart} onChange={(e) => setSlotStart(Number(e.target.value))} data-testid="slot-start-hour">
+                  {hours.map((h) => <option key={h} value={h}>{fmtHour(h)}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label">End time</label>
+                <select className="field" value={slotEnd} onChange={(e) => setSlotEnd(Number(e.target.value))} data-testid="slot-end-hour">
+                  {hours.filter((h) => h > slotStart).map((h) => <option key={h} value={h}>{fmtHour(h)}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="mt-3 rounded-xl bg-sky p-3 text-sm font-semibold text-royal" data-testid="slot-preview-text">
+              {slotPreviewText()}
+            </div>
+          </div>
+          <div>
             <h3 className="text-sm font-bold uppercase tracking-wide text-navy/50">Contact &amp; Social</h3>
             <div className="mt-3 grid gap-4 sm:grid-cols-3">
               <div>
@@ -549,7 +615,9 @@ export function HomepageTab() {
         <button
           className="btn btn-primary mt-4"
           onClick={() => {
-            setSettings({ ...useDB.getState().settings, consultationPrice: price, consultation30Price: price30, consultation60Price: price60, consultationFormUrl: formUrl, whatsapp: wa, instagram: ig });
+            if (slotDays.length === 0) { toast.error('Please select at least one day.'); return; }
+            if (slotEnd <= slotStart) { toast.error('End time must be after start time.'); return; }
+            setSettings({ ...useDB.getState().settings, consultationPrice: price, consultation30Price: price30, consultation60Price: price60, consultationFormUrl: formUrl, whatsapp: wa, instagram: ig, consultationSlots: { days: slotDays, startHour: slotStart, endHour: slotEnd, slotMinutes: 30 } });
             audit('Site settings updated');
             toast.success('Settings saved.');
           }}
