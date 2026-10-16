@@ -35,6 +35,11 @@ export function Navbar() {
 
   function go(id) {
     setOpen(false);
+    // Navigate to standalone page for consultation
+    if (id === 'consultation') {
+      navigate('/consultation');
+      return;
+    }
     if (pathname !== '/') {
       navigate('/');
       window.setTimeout(() => scrollToId(id), 500);
