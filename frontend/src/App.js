@@ -81,31 +81,38 @@ function Shell() {
   const isAdmin = location.pathname.startsWith('/admin');
   const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
-  // Handle return from Emergent Google sign-in (URL carries #session_id=...)
+  // Handle return from Google OAuth callback (cookie already set, URL has ?auth_success=1)
   useEffect(() => {
-    const m = window.location.hash.match(/session_id=([^&]+)/);
-    if (!m) return;
-    const sid = m[1];
-    (async () => {
-      try {
-        const res = await fetch(`${API}/auth/session`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id: sid }) });
-        if (!res.ok) throw new Error('auth failed');
-        const u = await res.json();
-        useSession.setState({ user: { id: u.user_id, name: u.name || u.email, email: u.email, picture: u.picture } });
-        toast.success(`Welcome, ${(u.name || u.email).split(' ')[0]}!`);
-        navigate('/dashboard', { replace: true });
-      } catch {
-        toast.error('Google sign-in failed. Please try again.');
-        navigate('/', { replace: true });
-      }
-    })();
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('auth_success') === '1') {
+      (async () => {
+        try {
+          const res = await fetch(`${API}/auth/me`, { credentials: 'include' });
+          if (!res.ok) throw new Error('auth failed');
+          const u = await res.json();
+          useSession.setState({ user: { id: u.user_id, name: u.name || u.email, email: u.email, picture: u.picture } });
+          toast.success(`Welcome, ${(u.name || u.email).split(' ')[0]}!`);
+        } catch {
+          toast.error('Google sign-in failed. Please try again.');
+        }
+        // Clean the URL
+        navigate(location.pathname, { replace: true });
+      })();
+      return;
+    }
+    const authErr = params.get('auth_error');
+    if (authErr) {
+      toast.error(authErr === 'cancelled' ? 'Sign-in was cancelled.' : 'Google sign-in failed. Please try again.');
+      navigate(location.pathname, { replace: true });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Restore an existing Google session on load
   useEffect(() => {
     hydrateContent();
-    if (window.location.hash.includes('session_id=')) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('auth_success') === '1') return; // handled above
     fetch(`${API}/auth/me`, { credentials: 'include' })
       .then((r) => (r.ok ? r.json() : null))
       .then((u) => { if (u && u.user_id) useSession.setState({ user: { id: u.user_id, name: u.name || u.email, email: u.email, picture: u.picture } }); })

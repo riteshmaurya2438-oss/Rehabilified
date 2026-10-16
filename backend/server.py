@@ -293,13 +293,13 @@ async def verify_payment(req: VerifyPaymentRequest, request: Request):
     return {"verified": True, "purchase": purchase}
 
 
-# ---------------- Emergent Google Authentication ----------------
-EMERGENT_SESSION_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
+# ---------------- Custom Google OAuth Authentication ----------------
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 SESSION_DAYS = 7
-
-
-class SessionRequest(BaseModel):
-    session_id: str
 
 
 async def _current_user(request: Request):
@@ -324,46 +324,130 @@ async def _current_user(request: Request):
     return user
 
 
-@api_router.post("/auth/session")
-async def auth_session(body: SessionRequest, response: Response):
-    try:
-        r = requests.get(EMERGENT_SESSION_URL, headers={"X-Session-ID": body.session_id}, timeout=15)
-    except Exception:
-        raise HTTPException(status_code=502, detail="Could not reach the authentication service.")
-    if r.status_code != 200:
-        raise HTTPException(status_code=401, detail="Invalid or expired session.")
-    data = r.json()
-    email = (data.get("email") or "").lower()
-    if not email:
-        raise HTTPException(status_code=400, detail="No email returned by the provider.")
+# REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+@api_router.get("/auth/google/login")
+async def google_login(request: Request, redirect: Optional[str] = None):
+    """Redirect user to Google's OAuth consent screen."""
+    # Build callback URL from the incoming request origin
+    origin = str(request.base_url).rstrip("/")
+    # Use X-Forwarded headers if behind proxy
+    forwarded_proto = request.headers.get("x-forwarded-proto", "")
+    forwarded_host = request.headers.get("x-forwarded-host", "")
+    if forwarded_host:
+        proto = forwarded_proto or "https"
+        origin = f"{proto}://{forwarded_host}"
+    callback_url = f"{origin}/api/auth/google/callback"
 
+    state = secrets.token_urlsafe(32)
+    # Store state + optional redirect in a short-lived cookie
+    params = {
+        "client_id": GOOGLE_CLIENT_ID,
+        "redirect_uri": callback_url,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "access_type": "offline",
+        "state": state,
+        "prompt": "select_account",
+    }
+    url = f"{GOOGLE_AUTH_URL}?{'&'.join(f'{k}={requests.utils.quote(str(v))}' for k, v in params.items())}"
+    resp = Response(status_code=307, headers={"Location": url})
+    # Pack state + frontend redirect into a cookie
+    cookie_val = f"{state}|{redirect or '/'}"
+    resp.set_cookie(key="oauth_state", value=cookie_val, httponly=True, secure=True, samesite="lax", max_age=600, path="/")
+    return resp
+
+
+@api_router.get("/auth/google/callback")
+async def google_callback(request: Request, code: str = "", state: str = "", error: str = ""):
+    """Handle Google's OAuth callback — exchange code for tokens, create user, set session."""
+    # Determine frontend origin for redirects
+    origin = str(request.base_url).rstrip("/")
+    forwarded_proto = request.headers.get("x-forwarded-proto", "")
+    forwarded_host = request.headers.get("x-forwarded-host", "")
+    if forwarded_host:
+        proto = forwarded_proto or "https"
+        origin = f"{proto}://{forwarded_host}"
+
+    # Verify state
+    cookie_val = request.cookies.get("oauth_state", "")
+    parts = cookie_val.split("|", 1)
+    saved_state = parts[0] if parts else ""
+    frontend_redirect = parts[1] if len(parts) > 1 else "/"
+
+    if error or not code:
+        return Response(status_code=307, headers={"Location": f"{origin}{frontend_redirect}?auth_error=cancelled"})
+
+    if not saved_state or state != saved_state:
+        logger.warning("OAuth state mismatch")
+        return Response(status_code=307, headers={"Location": f"{origin}{frontend_redirect}?auth_error=state_mismatch"})
+
+    # Exchange code for tokens
+    callback_url = f"{origin}/api/auth/google/callback"
+    try:
+        token_resp = requests.post(GOOGLE_TOKEN_URL, data={
+            "code": code,
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "redirect_uri": callback_url,
+            "grant_type": "authorization_code",
+        }, timeout=15)
+        if token_resp.status_code != 200:
+            logger.error(f"Google token exchange failed: {token_resp.text}")
+            return Response(status_code=307, headers={"Location": f"{origin}{frontend_redirect}?auth_error=token_failed"})
+        tokens = token_resp.json()
+    except Exception as e:
+        logger.error(f"Google token exchange error: {e}")
+        return Response(status_code=307, headers={"Location": f"{origin}{frontend_redirect}?auth_error=network"})
+
+    # Get user info from Google
+    try:
+        info_resp = requests.get(GOOGLE_USERINFO_URL, headers={"Authorization": f"Bearer {tokens['access_token']}"}, timeout=10)
+        if info_resp.status_code != 200:
+            return Response(status_code=307, headers={"Location": f"{origin}{frontend_redirect}?auth_error=userinfo_failed"})
+        guser = info_resp.json()
+    except Exception as e:
+        logger.error(f"Google userinfo error: {e}")
+        return Response(status_code=307, headers={"Location": f"{origin}{frontend_redirect}?auth_error=network"})
+
+    email = (guser.get("email") or "").lower()
+    name = guser.get("name", "")
+    picture = guser.get("picture", "")
+    if not email:
+        return Response(status_code=307, headers={"Location": f"{origin}{frontend_redirect}?auth_error=no_email"})
+
+    # Create or update user in DB
     existing = await db.users.find_one({"email": email}, {"_id": 0})
     if existing:
         user_id = existing["user_id"]
-        await db.users.update_one({"user_id": user_id}, {"$set": {"name": data.get("name", existing.get("name")), "picture": data.get("picture", existing.get("picture"))}})
+        await db.users.update_one({"user_id": user_id}, {"$set": {"name": name or existing.get("name"), "picture": picture or existing.get("picture")}})
     else:
         user_id = f"user_{uuid.uuid4().hex[:12]}"
         try:
             await db.users.insert_one({
                 "user_id": user_id,
                 "email": email,
-                "name": data.get("name", ""),
-                "picture": data.get("picture", ""),
+                "name": name,
+                "picture": picture,
                 "created_at": datetime.now(timezone.utc).isoformat(),
             })
         except DuplicateKeyError:
             existing = await db.users.find_one({"email": email}, {"_id": 0})
             user_id = existing["user_id"]
 
-    session_token = data.get("session_token") or uuid.uuid4().hex
+    # Create session
+    session_token = uuid.uuid4().hex
     expires_at = datetime.now(timezone.utc) + timedelta(days=SESSION_DAYS)
     await db.user_sessions.update_one(
         {"session_token": session_token},
         {"$set": {"user_id": user_id, "session_token": session_token, "expires_at": expires_at.isoformat(), "created_at": datetime.now(timezone.utc).isoformat()}},
         upsert=True,
     )
-    response.set_cookie(key="session_token", value=session_token, httponly=True, secure=True, samesite="none", path="/", max_age=SESSION_DAYS * 24 * 3600)
-    return {"user_id": user_id, "email": email, "name": data.get("name", ""), "picture": data.get("picture", "")}
+
+    # Redirect to frontend dashboard with session set via cookie
+    resp = Response(status_code=307, headers={"Location": f"{origin}/dashboard?auth_success=1"})
+    resp.set_cookie(key="session_token", value=session_token, httponly=True, secure=True, samesite="none", path="/", max_age=SESSION_DAYS * 24 * 3600)
+    resp.delete_cookie("oauth_state", path="/")
+    return resp
 
 
 @api_router.get("/auth/me")
