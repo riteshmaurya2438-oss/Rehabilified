@@ -374,12 +374,19 @@ async def google_callback(request: Request, code: str = "", state: str = "", err
     saved_state = parts[0] if parts else ""
     frontend_redirect = parts[1] if len(parts) > 1 else "/"
 
+    # Determine frontend base URL from the redirect parameter
+    # frontend_redirect is a full URL like "https://rehabilified.com/" or a path like "/"
+    if frontend_redirect.startswith("http"):
+        frontend_origin = frontend_redirect.rstrip("/")
+    else:
+        frontend_origin = origin
+
     if error or not code:
-        return Response(status_code=307, headers={"Location": f"{origin}{frontend_redirect}?auth_error=cancelled"})
+        return Response(status_code=307, headers={"Location": f"{frontend_origin}/?auth_error=cancelled"})
 
     if not saved_state or state != saved_state:
         logger.warning("OAuth state mismatch")
-        return Response(status_code=307, headers={"Location": f"{origin}{frontend_redirect}?auth_error=state_mismatch"})
+        return Response(status_code=307, headers={"Location": f"{frontend_origin}/?auth_error=state_mismatch"})
 
     # Exchange code for tokens
     callback_url = f"{origin}/api/auth/google/callback"
@@ -393,27 +400,27 @@ async def google_callback(request: Request, code: str = "", state: str = "", err
         }, timeout=15)
         if token_resp.status_code != 200:
             logger.error(f"Google token exchange failed: {token_resp.text}")
-            return Response(status_code=307, headers={"Location": f"{origin}{frontend_redirect}?auth_error=token_failed"})
+            return Response(status_code=307, headers={"Location": f"{frontend_origin}/?auth_error=token_failed"})
         tokens = token_resp.json()
     except Exception as e:
         logger.error(f"Google token exchange error: {e}")
-        return Response(status_code=307, headers={"Location": f"{origin}{frontend_redirect}?auth_error=network"})
+        return Response(status_code=307, headers={"Location": f"{frontend_origin}/?auth_error=network"})
 
     # Get user info from Google
     try:
         info_resp = requests.get(GOOGLE_USERINFO_URL, headers={"Authorization": f"Bearer {tokens['access_token']}"}, timeout=10)
         if info_resp.status_code != 200:
-            return Response(status_code=307, headers={"Location": f"{origin}{frontend_redirect}?auth_error=userinfo_failed"})
+            return Response(status_code=307, headers={"Location": f"{frontend_origin}/?auth_error=userinfo_failed"})
         guser = info_resp.json()
     except Exception as e:
         logger.error(f"Google userinfo error: {e}")
-        return Response(status_code=307, headers={"Location": f"{origin}{frontend_redirect}?auth_error=network"})
+        return Response(status_code=307, headers={"Location": f"{frontend_origin}/?auth_error=network"})
 
     email = (guser.get("email") or "").lower()
     name = guser.get("name", "")
     picture = guser.get("picture", "")
     if not email:
-        return Response(status_code=307, headers={"Location": f"{origin}{frontend_redirect}?auth_error=no_email"})
+        return Response(status_code=307, headers={"Location": f"{frontend_origin}/?auth_error=no_email"})
 
     # Create or update user in DB
     existing = await db.users.find_one({"email": email}, {"_id": 0})
@@ -444,8 +451,12 @@ async def google_callback(request: Request, code: str = "", state: str = "", err
     )
 
     # Redirect to frontend dashboard with session set via cookie
-    resp = Response(status_code=307, headers={"Location": f"{origin}/dashboard?auth_success=1"})
-    resp.set_cookie(key="session_token", value=session_token, httponly=True, secure=True, samesite="none", path="/", max_age=SESSION_DAYS * 24 * 3600)
+    resp = Response(status_code=307, headers={"Location": f"{frontend_origin}/dashboard?auth_success=1"})
+    # Set cookie domain for cross-subdomain compatibility
+    cookie_domain = None
+    if "rehabilified.com" in frontend_origin:
+        cookie_domain = ".rehabilified.com"
+    resp.set_cookie(key="session_token", value=session_token, httponly=True, secure=True, samesite="none", path="/", max_age=SESSION_DAYS * 24 * 3600, domain=cookie_domain)
     resp.delete_cookie("oauth_state", path="/")
     return resp
 
