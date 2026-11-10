@@ -830,3 +830,206 @@ export function SecurityTab({ onLock }) {
     </div>
   );
 }
+
+
+const API = process.env.REACT_APP_BACKEND_URL;
+
+/* ---------------- Coupons Tab ---------------- */
+export function CouponsTab() {
+  const [coupons, setCoupons] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [code, setCode] = useState('');
+  const [name, setName] = useState('');
+  const [discountType, setDiscountType] = useState('percent');
+  const [discountValue, setDiscountValue] = useState('');
+  const [appliesTo, setAppliesTo] = useState(['all']);
+  const [maxUses, setMaxUses] = useState('');
+  const [expiresAt, setExpiresAt] = useState('');
+  const [creating, setCreating] = useState(false);
+
+  // Get token from sessionStorage via adminToken() function
+  const getToken = () => {
+    try {
+      const raw = sessionStorage.getItem('rb-admin-session');
+      if (!raw) return null;
+      const v = JSON.parse(raw);
+      return v?.token || null;
+    } catch { return null; }
+  };
+  const token = getToken();
+
+  const fetchCoupons = async () => {
+    try {
+      const res = await fetch(`${API}/api/admin/coupons`, { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) {
+        const data = await res.json();
+        setCoupons(data.coupons || []);
+      }
+    } catch { /* ignore */ }
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchCoupons(); }, []); // eslint-disable-line
+
+  function toggleAppliesTo(val) {
+    if (val === 'all') {
+      setAppliesTo(['all']);
+      return;
+    }
+    const without = appliesTo.filter((v) => v !== 'all');
+    const next = without.includes(val) ? without.filter((v) => v !== val) : [...without, val];
+    setAppliesTo(next.length === 0 ? ['all'] : next);
+  }
+
+  async function createCoupon(e) {
+    e.preventDefault();
+    if (!code.trim()) return toast.error('Coupon code is required.');
+    if (!discountValue || Number(discountValue) <= 0) return toast.error('Discount value must be positive.');
+    if (discountType === 'percent' && Number(discountValue) > 100) return toast.error('Percentage cannot exceed 100.');
+    setCreating(true);
+    try {
+      const res = await fetch(`${API}/api/admin/coupons`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          code: code.trim(),
+          name: name.trim() || code.trim(),
+          discount_type: discountType,
+          discount_value: Number(discountValue),
+          applies_to: appliesTo,
+          max_uses: maxUses ? Number(maxUses) : null,
+          expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        toast.error(err.detail || 'Failed to create coupon.');
+      } else {
+        toast.success(`Coupon "${code.trim().toUpperCase()}" created!`);
+        setCode(''); setName(''); setDiscountValue(''); setMaxUses(''); setExpiresAt('');
+        fetchCoupons();
+      }
+    } catch { toast.error('Network error.'); }
+    setCreating(false);
+  }
+
+  async function deleteCoupon(couponId, couponCode) {
+    if (!window.confirm(`Delete coupon "${couponCode}"? This cannot be undone.`)) return;
+    try {
+      const res = await fetch(`${API}/api/admin/coupons/${couponId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) {
+        toast.success('Coupon deleted.');
+        fetchCoupons();
+      } else {
+        toast.error('Failed to delete coupon.');
+      }
+    } catch { toast.error('Network error.'); }
+  }
+
+  async function toggleActive(couponId) {
+    try {
+      const res = await fetch(`${API}/api/admin/coupons/${couponId}/toggle`, { method: 'PATCH', headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) {
+        fetchCoupons();
+      }
+    } catch { /* ignore */ }
+  }
+
+  const kindLabels = { course: 'Courses', lecture: 'Lectures', consultation: 'Consultations', all: 'All' };
+
+  return (
+    <div className="space-y-8">
+      {/* Create Coupon Form */}
+      <div className="rounded-2xl border border-navy/10 bg-white p-5 shadow-sm sm:p-6">
+        <h2 className="text-lg font-bold text-navy">Create new coupon</h2>
+        <form onSubmit={createCoupon} className="mt-4 space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="label">Coupon code</label>
+              <input className="field" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="e.g. FLAT50" data-testid="coupon-code" />
+            </div>
+            <div>
+              <label className="label">Description / Topic name</label>
+              <input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. 50% Off on All Courses" data-testid="coupon-name" />
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div>
+              <label className="label">Discount type</label>
+              <select className="field" value={discountType} onChange={(e) => setDiscountType(e.target.value)} data-testid="coupon-discount-type">
+                <option value="percent">Percentage (%)</option>
+                <option value="fixed">Fixed amount (₹)</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Discount value</label>
+              <input type="number" className="field" value={discountValue} onChange={(e) => setDiscountValue(e.target.value)} placeholder={discountType === 'percent' ? 'e.g. 50' : 'e.g. 200'} min="1" data-testid="coupon-discount-value" />
+            </div>
+            <div>
+              <label className="label">Max uses (optional)</label>
+              <input type="number" className="field" value={maxUses} onChange={(e) => setMaxUses(e.target.value)} placeholder="Unlimited" min="1" data-testid="coupon-max-uses" />
+            </div>
+          </div>
+          <div>
+            <label className="label">Applies to</label>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {['all', 'course', 'lecture', 'consultation'].map((v) => (
+                <button key={v} type="button" onClick={() => toggleAppliesTo(v)} data-testid={`coupon-applies-${v}`}
+                  className={`rounded-lg border-2 px-4 py-2 text-sm font-semibold transition ${appliesTo.includes(v) ? 'border-royal bg-royal text-white' : 'border-navy/15 bg-white text-navy/60 hover:border-royal/50'}`}>
+                  {kindLabels[v]}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="label">Expires at (optional)</label>
+            <input type="datetime-local" className="field" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} data-testid="coupon-expires" />
+          </div>
+          <button className="btn btn-primary" disabled={creating} data-testid="coupon-create-btn">
+            {creating ? 'Creating...' : '+ Create Coupon'}
+          </button>
+        </form>
+      </div>
+
+      {/* Coupons List */}
+      <div className="rounded-2xl border border-navy/10 bg-white p-5 shadow-sm sm:p-6">
+        <h2 className="text-lg font-bold text-navy">Active coupons</h2>
+        {loading ? (
+          <p className="mt-4 text-sm text-navy/50">Loading...</p>
+        ) : coupons.length === 0 ? (
+          <p className="mt-4 text-sm text-navy/50">No coupons created yet.</p>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {coupons.map((c) => (
+              <div key={c.coupon_id} className={`flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between ${c.active ? 'border-navy/10 bg-white' : 'border-red-200 bg-red-50/50'}`} data-testid={`coupon-row-${c.coupon_id}`}>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-md bg-navy px-3 py-1 font-mono text-sm font-bold text-white">{c.code}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${c.active ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{c.active ? 'Active' : 'Inactive'}</span>
+                    <span className="rounded-full bg-sky px-2 py-0.5 text-[11px] font-semibold text-royal">
+                      {c.discount_type === 'percent' ? `${c.discount_value}% off` : `₹${c.discount_value} off`}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-navy/60">{c.name}</p>
+                  <div className="mt-1 flex flex-wrap gap-3 text-xs text-navy/45">
+                    <span>Applies to: {(c.applies_to || []).map((v) => kindLabels[v] || v).join(', ')}</span>
+                    <span>Used: {c.usage_count || 0}{c.max_uses ? ` / ${c.max_uses}` : ''} times</span>
+                    {c.expires_at && <span>Expires: {new Date(c.expires_at).toLocaleDateString()}</span>}
+                  </div>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <button onClick={() => toggleActive(c.coupon_id)} className={`btn ${c.active ? 'btn-outline' : 'btn-primary'} !px-3 !py-2 text-xs`} data-testid={`coupon-toggle-${c.coupon_id}`}>
+                    {c.active ? 'Deactivate' : 'Activate'}
+                  </button>
+                  <button onClick={() => deleteCoupon(c.coupon_id, c.code)} className="btn btn-outline !border-red-300 !px-3 !py-2 text-xs !text-red-600 hover:!bg-red-50" data-testid={`coupon-delete-${c.coupon_id}`}>
+                    <Trash2 className="h-3.5 w-3.5" /> Delete
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

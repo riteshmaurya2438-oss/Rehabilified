@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { AlertTriangle, ArrowLeft, ArrowRight, Award, BookOpen, Calendar, Check, CheckCircle2, Clock, Copy, ExternalLink, GraduationCap, Loader2, Play, ShieldAlert, ShieldCheck, Users, Video } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, Award, BookOpen, Calendar, Check, CheckCircle2, Clock, Copy, ExternalLink, GraduationCap, Loader2, Play, ShieldAlert, ShieldCheck, Tag, Users, Video } from 'lucide-react';
 import { Modal, Reveal, SectionHeading } from './ui';
 import { useDB, useSession } from '../lib/store';
 import { useUI } from '../lib/ui';
@@ -241,6 +241,47 @@ function getAvailableDates(allowedDays) {
 
 const DAY_NAMES_FULL = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
+/* Consultation coupon input */
+function ConsultCouponInput({ kind, amount, onApply, onClear }) {
+  const [code, setCode] = useState('');
+  const [checking, setChecking] = useState(false);
+  const [applied, setApplied] = useState(null);
+  async function validate() {
+    if (!code.trim()) return toast.error('Enter a coupon code.');
+    setChecking(true);
+    try {
+      const res = await fetch(`${API_BASE}/coupons/validate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ code: code.trim(), kind, amount }) });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.detail || 'Invalid coupon.'); setApplied(null); onClear?.(); }
+      else { setApplied(data); onApply?.(data); toast.success(`Coupon applied! You save ${inr(data.discount_amount)}`); }
+    } catch { toast.error('Could not validate coupon.'); }
+    setChecking(false);
+  }
+  function clear() { setCode(''); setApplied(null); onClear?.(); }
+  return (
+    <div className="rounded-xl border border-dashed border-navy/20 bg-sky/30 p-3" data-testid="consult-coupon-input">
+      {!applied ? (
+        <div className="flex items-center gap-2">
+          <Tag className="h-4 w-4 shrink-0 text-royal" />
+          <input className="field !py-2 !text-sm" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="Coupon code" data-testid="consult-coupon-code" />
+          <button type="button" onClick={validate} disabled={checking} className="btn btn-outline !px-3 !py-2 text-xs" data-testid="consult-coupon-apply">
+            {checking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Apply'}
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm">
+            <Check className="h-4 w-4 text-emerald-600" />
+            <span className="font-semibold text-emerald-700">{applied.code}</span>
+            <span className="text-navy/60">— {applied.discount_type === 'percent' ? `${applied.discount_value}% off` : `${inr(applied.discount_value)} off`}</span>
+          </div>
+          <button type="button" onClick={clear} className="text-xs font-semibold text-red-500 hover:underline" data-testid="consult-coupon-remove">Remove</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function slotAvailabilityText(cfg) {
   const days = (cfg?.days || [0, 1, 2, 3]).sort();
   const names = days.map(d => DAY_NAMES_FULL[d]);
@@ -272,6 +313,7 @@ export function ConsultationSection() {
   const [phone, setPhone] = useState('');
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [couponData, setCouponData] = useState(null);
 
   const availableDates = useMemo(() => getAvailableDates(slotCfg.days), [slotCfg.days]);
   const availabilityText = useMemo(() => slotAvailabilityText(slotCfg), [slotCfg]);
@@ -283,6 +325,7 @@ export function ConsultationSection() {
     setSelectedTime(null);
     setSlots([]);
     setBusy(false);
+    setCouponData(null);
   }
 
   function closeModal() {
@@ -325,17 +368,19 @@ export function ConsultationSection() {
     if (!ccPhoneOk(phone)) return void toast.error('Please enter a valid phone number.');
     setBusy(true);
     try {
+      const finalAmount = couponData ? couponData.final_amount : chosen.price;
       const p = await requestPayment({
         kind: 'consultation',
         refId: chosen.id,
         label: chosen.label,
-        amount: chosen.price,
+        amount: finalAmount,
         name: name.trim(),
         email: email.trim(),
         phone: phone.trim(),
         slot_date: selectedDate.date,
         slot_time: selectedTime.time,
         slot_duration: chosen.mins,
+        coupon_code: couponData?.code || null,
       });
       if (!p) { setBusy(false); return; }
       if (p.status === 'paid' && p.verified) {
@@ -447,7 +492,14 @@ export function ConsultationSection() {
                   {selectedDate && <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5 text-royal" /> {selectedDate.label}</span>}
                   {selectedTime && <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5 text-royal" /> {fmtTime(selectedTime.time)} – {endTimeLabel}</span>}
                 </div>
-                <p className="mt-2 font-display text-2xl font-extrabold text-royal">{inr(chosen.price)}</p>
+                {couponData ? (
+                  <div className="mt-2">
+                    <p className="text-xs text-navy/50 line-through">{inr(chosen.price)}</p>
+                    <p className="font-display text-2xl font-extrabold text-royal">{inr(couponData.final_amount)} <span className="ml-1 text-sm font-semibold text-emerald-600">(-{inr(couponData.discount_amount)})</span></p>
+                  </div>
+                ) : (
+                  <p className="mt-2 font-display text-2xl font-extrabold text-royal">{inr(chosen.price)}</p>
+                )}
               </div>
             )}
 
@@ -513,12 +565,13 @@ export function ConsultationSection() {
               <div data-testid="slot-form">
                 <button onClick={() => { setStep('time'); fetchSlots(selectedDate.date, chosen.mins); }} className="mb-3 flex items-center gap-1 text-sm text-royal hover:underline"><ArrowLeft className="h-3.5 w-3.5" /> Change time</button>
                 <form onSubmit={pay} className="space-y-4">
+                  <ConsultCouponInput kind="consultation" amount={chosen.price} onApply={setCouponData} onClear={() => setCouponData(null)} />
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div><label className="label" htmlFor="cc-name">Full name</label><input id="cc-name" data-testid="cc-name" className="field" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" /></div>
                     <div><label className="label" htmlFor="cc-phone">Phone / WhatsApp</label><input id="cc-phone" data-testid="cc-phone" type="tel" className="field" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98765 43210" autoComplete="tel" /></div>
                     <div className="sm:col-span-2"><label className="label" htmlFor="cc-email">Email</label><input id="cc-email" data-testid="cc-email" type="email" className="field" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email" /></div>
                   </div>
-                  <button data-testid="cc-pay-btn" className="btn btn-primary w-full py-3.5" disabled={busy}>{busy ? 'Opening secure checkout\u2026' : `Pay ${inr(chosen.price)} securely`}</button>
+                  <button data-testid="cc-pay-btn" className="btn btn-primary w-full py-3.5" disabled={busy}>{busy ? 'Opening secure checkout\u2026' : `Pay ${inr(couponData ? couponData.final_amount : chosen.price)} securely`}</button>
                   <p className="flex items-center justify-center gap-2 text-center text-xs text-navy/50"><ShieldCheck className="h-4 w-4 text-royal" /> Secure payment via Razorpay (INR). The registration link is shown only after your payment is confirmed.</p>
                 </form>
               </div>

@@ -1,14 +1,76 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ShieldCheck, Info } from 'lucide-react';
+import { Check, Loader2, ShieldCheck, Info, Tag } from 'lucide-react';
 import { Modal } from './ui';
 import { recordFreePurchase, useDB, useSession } from '../lib/store';
 import { useUI } from '../lib/ui';
-import { makePayment, requestPayment } from '../lib/payments';
+import { makePayment, requestPayment, API_BASE } from '../lib/payments';
 import { fmtDate, fmtTime, inr } from '../lib/format';
 
 const validPhone = (p) => p.replace(/\D/g, '').length >= 10;
+
+/* ---------------- Reusable Coupon Input ---------------- */
+function CouponInput({ kind, amount, onApply, onClear }) {
+  const [code, setCode] = useState('');
+  const [checking, setChecking] = useState(false);
+  const [applied, setApplied] = useState(null);
+
+  async function validate() {
+    if (!code.trim()) return toast.error('Enter a coupon code.');
+    setChecking(true);
+    try {
+      const res = await fetch(`${API_BASE}/coupons/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ code: code.trim(), kind, amount }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.detail || 'Invalid coupon.');
+        setApplied(null);
+        onClear?.();
+      } else {
+        setApplied(data);
+        onApply?.(data);
+        toast.success(`Coupon applied! You save ${inr(data.discount_amount)}`);
+      }
+    } catch {
+      toast.error('Could not validate coupon.');
+    }
+    setChecking(false);
+  }
+
+  function clear() {
+    setCode('');
+    setApplied(null);
+    onClear?.();
+  }
+
+  return (
+    <div className="rounded-xl border border-dashed border-navy/20 bg-sky/30 p-3" data-testid="coupon-input">
+      {!applied ? (
+        <div className="flex items-center gap-2">
+          <Tag className="h-4 w-4 shrink-0 text-royal" />
+          <input className="field !py-2 !text-sm" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="Coupon code" data-testid="coupon-code-input" />
+          <button type="button" onClick={validate} disabled={checking} className="btn btn-outline !px-3 !py-2 text-xs" data-testid="coupon-apply-btn">
+            {checking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Apply'}
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm">
+            <Check className="h-4 w-4 text-emerald-600" />
+            <span className="font-semibold text-emerald-700">{applied.code}</span>
+            <span className="text-navy/60">— {applied.discount_type === 'percent' ? `${applied.discount_value}% off` : `${inr(applied.discount_value)} off`}</span>
+          </div>
+          <button type="button" onClick={clear} className="text-xs font-semibold text-red-500 hover:underline" data-testid="coupon-remove-btn">Remove</button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /* ---------------- Sign in ---------------- */
 export function AuthModal() {
@@ -54,12 +116,14 @@ export function CheckoutModal() {
   const [role, setRole] = useState('Physiotherapy student');
   const [goal, setGoal] = useState('');
   const [busy, setBusy] = useState(false);
+  const [couponData, setCouponData] = useState(null);
 
   useEffect(() => {
     if (target) {
       setPhone('');
       setGoal('');
       setBusy(false);
+      setCouponData(null);
     }
   }, [target]);
 
@@ -98,8 +162,9 @@ export function CheckoutModal() {
 
       let paymentId;
       let serverPurchaseId;
-      if (info.amount > 0) {
-        const p = await requestPayment({ kind: target.kind, refId: target.refId, label: info.title, amount: info.amount, name: user.name, email: user.email, phone });
+      const finalAmount = couponData ? couponData.final_amount : info.amount;
+      if (finalAmount > 0) {
+        const p = await requestPayment({ kind: target.kind, refId: target.refId, label: info.title, amount: finalAmount, name: user.name, email: user.email, phone, coupon_code: couponData?.code || null });
         if (!p) return;
         store.addPayment(p);
         if (p.status !== 'paid') {
@@ -184,8 +249,16 @@ export function CheckoutModal() {
           <div className="rounded-2xl bg-sky p-4">
             <p className="font-semibold text-navy">{info.title}</p>
             <p className="mt-1 text-sm text-navy/65">{info.subtitle}</p>
-            <p className="mt-3 font-display text-2xl font-extrabold text-royal">{inr(info.amount)}</p>
+            {couponData ? (
+              <div className="mt-3">
+                <p className="text-sm text-navy/50 line-through">{inr(info.amount)}</p>
+                <p className="font-display text-2xl font-extrabold text-royal">{inr(couponData.final_amount)} <span className="ml-1 text-sm font-semibold text-emerald-600">(-{inr(couponData.discount_amount)})</span></p>
+              </div>
+            ) : (
+              <p className="mt-3 font-display text-2xl font-extrabold text-royal">{inr(info.amount)}</p>
+            )}
           </div>
+          <CouponInput kind={target?.kind} amount={info.amount} onApply={setCouponData} onClear={() => setCouponData(null)} />
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="label" htmlFor="co-name">Full name</label>

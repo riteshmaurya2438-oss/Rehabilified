@@ -2,14 +2,14 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import toast from 'react-hot-toast';
-import { BarChart3, BookOpen, CalendarClock, Check, Copy, CreditCard, ImageIcon, LayoutDashboard, Lock, LogOut, MessageSquareQuote, ShieldCheck, ShieldAlert, Stethoscope, Users, Video } from 'lucide-react';
+import { BarChart3, BookOpen, CalendarClock, Check, Copy, CreditCard, ImageIcon, LayoutDashboard, Lock, LogOut, MessageSquareQuote, ShieldCheck, ShieldAlert, Stethoscope, Tag, Users, Video } from 'lucide-react';
 import { audit, fmtWait, useAdminSession, useAuth } from '../../lib/adminAuth';
 import { strength } from '../../lib/security';
 import { useSEO } from '../../lib/seo';
 import { syncAfterLogin } from '../../lib/store';
 import { BrandMark, EASE, Logo } from '../../components/ui';
 import { PasswordInput, StrengthMeter } from './parts';
-import { AppointmentsTab, BrandTab, ContentTab, Courses, HomepageTab, Lectures, Overview, PaymentsTab, Registrations, SecurityTab, SlotsTab } from './tabs';
+import { AppointmentsTab, BrandTab, ContentTab, CouponsTab, Courses, HomepageTab, Lectures, Overview, PaymentsTab, Registrations, SecurityTab, SlotsTab } from './tabs';
 import { cn } from '../../utils/cn';
 
 function useNoIndex() {
@@ -285,6 +285,7 @@ const NAV = [
   { id: 'registrations', label: 'Registrations', icon: Users },
   { id: 'payments', label: 'Payments', icon: CreditCard },
   { id: 'appointments', label: 'Appointments', icon: Stethoscope },
+  { id: 'coupons', label: 'Coupons', icon: Tag },
   { id: 'content', label: 'Testimonials & FAQs', icon: MessageSquareQuote },
   { id: 'homepage', label: 'Homepage numbers', icon: BarChart3 },
   { id: 'brand', label: 'Logo & photo', icon: ImageIcon },
@@ -339,6 +340,7 @@ function Shell() {
     registrations: <Registrations />,
     payments: <PaymentsTab />,
     appointments: <AppointmentsTab />,
+    coupons: <CouponsTab />,
     content: <ContentTab />,
     homepage: <HomepageTab />,
     brand: <BrandTab />,

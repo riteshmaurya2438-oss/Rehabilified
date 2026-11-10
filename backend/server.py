@@ -93,6 +93,7 @@ class CreateOrderRequest(BaseModel):
     slot_date: Optional[str] = None      # YYYY-MM-DD for consultation slots
     slot_time: Optional[str] = None      # HH:MM for consultation slots
     slot_duration: Optional[int] = None  # 30 or 60
+    coupon_code: Optional[str] = None    # discount coupon code
 
 
 class VerifyPaymentRequest(BaseModel):
@@ -129,6 +130,46 @@ async def create_order(req: CreateOrderRequest, request: Request):
             raise HTTPException(status_code=409, detail="You have already purchased this item.")
 
     amount_paise = int(round(req.amount * 100))
+
+    # --- Coupon discount ---
+    coupon_doc = None
+    discount_amount = 0
+    if req.coupon_code:
+        coupon_doc = await db.coupons.find_one({
+            "code": req.coupon_code.strip().upper(),
+            "active": True,
+        })
+        if not coupon_doc:
+            raise HTTPException(status_code=400, detail="Invalid or expired coupon code.")
+        # Check expiry
+        expires = coupon_doc.get("expires_at", "")
+        if expires:
+            exp_dt = datetime.fromisoformat(expires)
+            if exp_dt.tzinfo is None:
+                exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+            if exp_dt < datetime.now(timezone.utc):
+                raise HTTPException(status_code=400, detail="This coupon has expired.")
+        # Check applies_to
+        applies_to = coupon_doc.get("applies_to", [])
+        item_kind = req.kind or ""
+        if applies_to and "all" not in applies_to and item_kind not in applies_to:
+            raise HTTPException(status_code=400, detail=f"This coupon cannot be used for {item_kind}s.")
+        # Check max uses
+        max_uses = coupon_doc.get("max_uses")
+        if max_uses and coupon_doc.get("usage_count", 0) >= max_uses:
+            raise HTTPException(status_code=400, detail="This coupon has reached its usage limit.")
+        # Calculate discount
+        if coupon_doc.get("discount_type") == "percent":
+            discount_amount = int(round(amount_paise * coupon_doc["discount_value"] / 100))
+        else:
+            discount_amount = int(round(coupon_doc["discount_value"] * 100))
+        # Cap discount at the total amount (avoid negative)
+        discount_amount = min(discount_amount, amount_paise)
+        amount_paise = amount_paise - discount_amount
+
+    if amount_paise <= 0:
+        raise HTTPException(status_code=400, detail="Amount after discount must be greater than zero.")
+
     receipt = f"rb_{uuid.uuid4().hex[:18]}"  # must be <= 40 chars
     try:
         order = razorpay_client.order.create({
@@ -150,6 +191,10 @@ async def create_order(req: CreateOrderRequest, request: Request):
     await db.payments.insert_one({
         "order_id": order["id"],
         "amount": amount_paise,
+        "original_amount": int(round(req.amount * 100)),
+        "discount_amount": discount_amount,
+        "coupon_code": coupon_doc["code"] if coupon_doc else None,
+        "coupon_id": str(coupon_doc["_id"]) if coupon_doc else None,
         "currency": order.get("currency", "INR"),
         "kind": req.kind,
         "refId": req.refId,
@@ -166,7 +211,12 @@ async def create_order(req: CreateOrderRequest, request: Request):
         "payment_id": None,
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
-    return {"orderId": order["id"], "amount": order["amount"], "currency": order.get("currency", "INR"), "keyId": RAZORPAY_KEY_ID}
+
+    # Increment coupon usage count
+    if coupon_doc:
+        await db.coupons.update_one({"_id": coupon_doc["_id"]}, {"$inc": {"usage_count": 1}})
+
+    return {"orderId": order["id"], "amount": order["amount"], "currency": order.get("currency", "INR"), "keyId": RAZORPAY_KEY_ID, "discount": discount_amount / 100 if discount_amount else 0}
 
 
 @api_router.post("/verify-payment")
@@ -901,6 +951,125 @@ async def _release_consultation_slots(purchase_doc):
     pid = purchase_doc.get("payment_id")
     if sd and st and pid:
         await db.booked_slots.delete_many({"payment_id": pid})
+
+
+# ---------- Coupon Management ----------
+
+class CouponCreate(BaseModel):
+    code: str
+    name: str = ""
+    discount_type: str = "percent"  # percent | fixed
+    discount_value: float
+    applies_to: list = []  # ["course", "lecture", "consultation"] or ["all"]
+    max_uses: Optional[int] = None
+    expires_at: Optional[str] = None  # ISO string
+
+
+@api_router.get("/admin/coupons")
+async def list_coupons(request: Request):
+    await require_admin(request)
+    cursor = db.coupons.find({}, {"_id": 0}).sort("created_at", -1)
+    return {"coupons": [doc async for doc in cursor]}
+
+
+@api_router.post("/admin/coupons")
+async def create_coupon(body: CouponCreate, request: Request):
+    await require_admin(request)
+    code = body.code.strip().upper()
+    if not code:
+        raise HTTPException(status_code=400, detail="Coupon code is required.")
+    if body.discount_value <= 0:
+        raise HTTPException(status_code=400, detail="Discount value must be positive.")
+    if body.discount_type == "percent" and body.discount_value > 100:
+        raise HTTPException(status_code=400, detail="Percentage discount cannot exceed 100%.")
+    # Check duplicate code
+    existing = await db.coupons.find_one({"code": code})
+    if existing:
+        raise HTTPException(status_code=409, detail=f"Coupon code '{code}' already exists.")
+    coupon_id = f"coup_{uuid.uuid4().hex[:10]}"
+    doc = {
+        "coupon_id": coupon_id,
+        "code": code,
+        "name": body.name.strip() or code,
+        "discount_type": body.discount_type,
+        "discount_value": body.discount_value,
+        "applies_to": body.applies_to or ["all"],
+        "max_uses": body.max_uses,
+        "usage_count": 0,
+        "active": True,
+        "expires_at": body.expires_at or "",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.coupons.insert_one(doc)
+    doc.pop("_id", None)
+    return {"ok": True, "coupon": doc}
+
+
+@api_router.delete("/admin/coupons/{coupon_id}")
+async def delete_coupon(coupon_id: str, request: Request):
+    await require_admin(request)
+    result = await db.coupons.delete_one({"coupon_id": coupon_id})
+    if not result.deleted_count:
+        raise HTTPException(status_code=404, detail="Coupon not found.")
+    return {"ok": True}
+
+
+@api_router.patch("/admin/coupons/{coupon_id}/toggle")
+async def toggle_coupon(coupon_id: str, request: Request):
+    await require_admin(request)
+    doc = await db.coupons.find_one({"coupon_id": coupon_id})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Coupon not found.")
+    new_active = not doc.get("active", True)
+    await db.coupons.update_one({"coupon_id": coupon_id}, {"$set": {"active": new_active}})
+    return {"ok": True, "active": new_active}
+
+
+@api_router.post("/coupons/validate")
+async def validate_coupon(request: Request):
+    body = await request.json()
+    code = (body.get("code") or "").strip().upper()
+    kind = body.get("kind", "")
+    amount = body.get("amount", 0)
+    if not code:
+        raise HTTPException(status_code=400, detail="Please enter a coupon code.")
+    doc = await db.coupons.find_one({"code": code, "active": True})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Invalid coupon code.")
+    # Check expiry
+    expires = doc.get("expires_at", "")
+    if expires:
+        exp_dt = datetime.fromisoformat(expires)
+        if exp_dt.tzinfo is None:
+            exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+        if exp_dt < datetime.now(timezone.utc):
+            raise HTTPException(status_code=400, detail="This coupon has expired.")
+    # Check applies_to
+    applies_to = doc.get("applies_to", [])
+    if applies_to and "all" not in applies_to and kind not in applies_to:
+        raise HTTPException(status_code=400, detail=f"This coupon is not valid for {kind}s.")
+    # Check max uses
+    max_uses = doc.get("max_uses")
+    if max_uses and doc.get("usage_count", 0) >= max_uses:
+        raise HTTPException(status_code=400, detail="This coupon has reached its usage limit.")
+    # Calculate discount
+    amount_paise = int(round(amount * 100))
+    if doc.get("discount_type") == "percent":
+        discount_paise = int(round(amount_paise * doc["discount_value"] / 100))
+    else:
+        discount_paise = int(round(doc["discount_value"] * 100))
+    discount_paise = min(discount_paise, amount_paise)
+    final = amount_paise - discount_paise
+    return {
+        "valid": True,
+        "code": doc["code"],
+        "name": doc.get("name", ""),
+        "discount_type": doc["discount_type"],
+        "discount_value": doc["discount_value"],
+        "discount_amount": discount_paise / 100,
+        "final_amount": final / 100,
+        "original_amount": amount,
+    }
 
 
 # ---------- Dynamic consultation slot configuration ----------

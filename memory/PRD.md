@@ -8,70 +8,64 @@ Clone a React + Vite + Tailwind frontend-only website ("Rehabilified" by Dr. Say
 - **Backend**: FastAPI + Motor (async MongoDB) + Razorpay SDK
 - **Database**: MongoDB (local preview, production on user's VPS)
 - **Auth**: Custom Google OAuth for students; password-based for admin
-- **Custom Domain**: rehabilified.com
+- **Custom Domain**: rehabilified.com (frontend) + backend.rehabilified.com (backend)
 
 ## Core Features — Completed
 - [x] Brand logo in navbar, footer, splash screen
 - [x] Website favicon with cache-busting (?v=2) + manifest.json
 - [x] Premium masonry image gallery with lightbox
-- [x] Hero section with 3 CTA buttons (Appointments, Lectures, Consultations)
+- [x] Hero section with 3 CTA buttons
 - [x] Course thumbnail image upload in Admin panel
 - [x] Consultation dynamic pricing & Google Form link in Admin "Site Settings"
-- [x] Course checkout bug fix (lesson count crash)
-- [x] Student purchases (courses, lectures, consultations) stored in MongoDB
-- [x] `access_link` / `joinLink` validation in Admin; links returned on Razorpay verify
+- [x] Student purchases stored in MongoDB
 - [x] Custom Google OAuth (user's own credentials, no Emergent branding)
+- [x] Cross-domain OAuth redirect fix (backend.rehabilified.com → rehabilified.com)
 - [x] Course "parts" data structure in store and Admin panel
 - [x] Deep-link standalone pages for courses, lectures, consultations
+- [x] Shareable consultation page with Share + Copy buttons
 - [x] Consultation slot booking system (date → time → pay → lock in DB)
 - [x] Registration Form link in student dashboard for consultation bookings
-- [x] `booked_slots` collection with unique index to prevent double-booking
-- [x] Shareable consultation page with Share + Copy buttons
-- [x] **Dynamic consultation schedule in admin** — toggle days (Mon-Sun), set start/end time, auto-updates frontend — Oct 16, 2026
-- [x] Navbar "1:1 Consultation" links to standalone consultation page
-
-## Google OAuth Configuration
-- Client ID: 351024347825-ufqia77j36934sp1uupdg32ip5stmv80.apps.googleusercontent.com
-- Authorized JavaScript Origins: preview URL, rehabilified.com, www.rehabilified.com
-- Authorized Redirect URIs: {origin}/api/auth/google/callback for each origin
+- [x] Dynamic consultation schedule in admin (toggle days, set start/end time)
+- [x] **Coupon/Discount System** — Nov 10, 2026
+  - Admin: create/list/toggle/delete coupons (code, name, discount type, value, applies_to, max_uses, expiry)
+  - Checkout: coupon input on courses, lectures, and consultations with live discount preview
+  - Backend: full validation, Razorpay order discount, usage tracking
 
 ## Key DB Schema
 - `site_content`: {content_data, stats, testimonials, slots, courses, settings}
-  - `settings.consultationSlots`: {days: [0,1,2,3], startHour: 14, endHour: 17, slotMinutes: 30}
-- `admin_auth`: {_id: 'admin', hash, token, recoveryCode}
-- `admin_sessions`: {_id, token, created}
-- `orders`: {_id, amount, currency, status, user_info}
-- `purchases`: {user_id, item_id, kind, amount, status, access_link, slot_date, slot_time, slot_duration}
-- `booked_slots`: {date, time, user_id, consultation_type, payment_id, order_id} — unique index on (date, time)
+- `coupons`: {coupon_id, code, name, discount_type, discount_value, applies_to, max_uses, usage_count, active, expires_at}
+- `purchases`: {user_id, item_id, kind, amount, status, access_link, slot_date, slot_time, coupon_code}
+- `booked_slots`: {date, time, user_id, consultation_type, payment_id} — unique index on (date, time)
 - `users`: {user_id, email, name, picture}
 - `user_sessions`: {session_token, user_id, expires_at}
 
 ## Key API Endpoints
-- `POST /api/verify-payment` — Razorpay HMAC verification + auto-create purchase + book slots
-- `GET /api/purchases` — Fetch authenticated user's purchases
-- `GET/PUT /api/content` — Global site content sync
-- `GET /api/consultation-slots?date=&duration=` — Available time slots (dynamic from DB config)
-- `GET /api/consultation-config` — Returns current slot configuration (days, hours, display text)
-- `GET /api/auth/google/login` — Initiates Google OAuth flow
-- `GET /api/auth/google/callback` — Handles Google OAuth callback
-- `GET /api/auth/me` — Returns current user
-- `POST /api/auth/logout` — Logs out user
+- `POST /api/admin/coupons` — Create coupon (admin)
+- `GET /api/admin/coupons` — List coupons (admin)
+- `DELETE /api/admin/coupons/{id}` — Delete coupon (admin)
+- `PATCH /api/admin/coupons/{id}/toggle` — Toggle active (admin)
+- `POST /api/coupons/validate` — Validate coupon code (public)
+- `POST /api/create-order` — Creates Razorpay order with coupon discount
+- `POST /api/verify-payment` — Verifies payment + books slots
+- `GET /api/consultation-slots` — Available time slots (dynamic from DB)
+- `GET /api/consultation-config` — Slot config (days, hours)
+- `GET /api/auth/google/login` — Google OAuth login
+- `GET /api/auth/google/callback` — Google OAuth callback
 
-## Backlog (Prioritized)
+## Backlog
 ### P0
-- Admin panel: show booked consultation slots / schedule view
-
+- Admin slot calendar (booked consultation schedule view)
 ### P1
-- Oracle Cloud Free VPS deployment guide (markdown)
-
+- VPS deployment guide (step-by-step markdown)
 ### P2
-- Admin session timeout adjustment (extend to 24h instead of lockout-on-exit)
-- Backend refactoring: modularize server.py with APIRouter
+- Admin session timeout (24h instead of lockout-on-exit)
+- Backend modularization (APIRouter)
 
 ## Credentials
 - Admin Setup Code: RB-SUF2025REHAB
 - Admin Password: TestAdmin@1234
 - Custom Domain: rehabilified.com
+- Test Coupon: FLAT50 (50% off courses/lectures/consultations)
 
 ## 3rd Party Integrations
 - Razorpay (live keys in .env)
